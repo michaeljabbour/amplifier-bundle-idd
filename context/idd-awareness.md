@@ -34,14 +34,61 @@ Use `idd_decompose` when:
 
 You do NOT need to decompose simple, single-step requests.
 
-## The Flow
+## The Execution Contract
 
-1. **Layer 1 (Voice):** User expresses intent in natural language.
-2. **You call `idd_decompose`** with the user's input.
-3. **Present the plan** to the user. A 15-second confirmation window opens
-   automatically -- the user can adjust direction or let it auto-proceed.
-4. **Execute** by delegating to agents or running the compiled recipe.
-5. **Report completion** against the original intent and success criteria.
+Decomposition is the BEGINNING of work, not the deliverable. When a user asks
+you to do something, they want the WORK DONE — the decomposition is your
+internal planning step, not the output.
+
+After `idd_decompose` returns, you MUST drive through all four phases without
+stopping to ask "what next?" The user already told you what next — they told
+you when they gave you the task.
+
+### Phase 1: Decompose
+Call `idd_decompose` with the user's input. Read the result internally.
+Present a **brief** summary (goal + agents + key criteria) — not the full JSON.
+
+### Phase 2: Ground (resolve unknowns)
+Check the `context.to_discover` list from the decomposition. For EACH item:
+- If you can resolve it yourself (read files, explore code, search), DO IT NOW.
+- If you need the user's input (e.g., "which repo?"), ask ONLY those specific
+  questions — then proceed once answered.
+- Do NOT list discovery items as informational decoration. They are pre-conditions.
+
+### Phase 3: Execute
+Delegate to the agents identified in the decomposition. Pass them the context
+you gathered in Phase 2. If the decomposition has multiple agents in sequence,
+run them in order, feeding each agent's output to the next.
+
+Do NOT ask "would you like me to execute this?" — the user asked for the work
+when they gave you the task. Execute it.
+
+### Phase 4: Verify and Report
+After execution, check EACH success criterion from the decomposition:
+- **Pass**: state what evidence confirms it.
+- **Fail**: state what went wrong and suggest a fix.
+- **Unable to verify**: state why and what would be needed.
+
+Report against the original intent. The user should see RESULTS, not a plan.
+
+### When to pause instead of execute
+
+Pause and confirm ONLY when:
+- The decomposition confidence is below 60% (too many unknowns)
+- The task is destructive or irreversible (trigger.confirmation = "human")
+- The user explicitly said "plan this" or "break this down" (they want the plan itself)
+
+In ALL other cases: decompose → ground → execute → verify. One flow.
+
+### Anti-patterns — do NOT do these
+
+| Temptation | Why it's wrong | Do this instead |
+|-----------|---------------|----------------|
+| Present the full decomposition JSON and ask "what next?" | The user asked for work, not a plan to admire | Summarize briefly, then execute |
+| List "To Discover" items without resolving them | Discovery items are blockers, not decoration | Resolve each one before executing |
+| Offer a menu: "Compile / Refine / Execute?" | Menus transfer responsibility back to the user | Execute. If it needs refinement, that'll show in verification |
+| Stop because confidence is 75% | 75% is good enough to start. Unknowns resolve during execution | Proceed and adapt |
+| Decompose a simple task into 5 agents | IDD is for complex work. Simple tasks get simple execution | Skip decomposition for single-step requests |
 
 ## Mid-Flight Correction
 
