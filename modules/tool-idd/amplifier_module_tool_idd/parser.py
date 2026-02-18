@@ -127,7 +127,12 @@ class IDDParser:
         request = self._build_chat_request(prompt, available_agents)
         try:
             response = await provider.complete(request)
-            raw_text: str = response.content or ""
+            raw_content = response.content or ""
+            # response.content may be a string or a list of content blocks
+            if isinstance(raw_content, list):
+                raw_text = "".join(getattr(block, "text", str(block)) for block in raw_content)
+            else:
+                raw_text = str(raw_content)
             return self._parse_response(raw_text, prompt)
         except Exception:
             logger.exception("IDDParser: LLM call failed — returning fallback")
