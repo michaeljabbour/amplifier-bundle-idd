@@ -33,15 +33,15 @@ IDD provides a formal grammar with **five primitives** and **three layers**.
 Add the IDD bundle to your Amplifier installation:
 
 ```bash
-amplifier bundle add /path/to/amplifier-bundle-idd/bundle.md --name idd
+amplifier bundle add git+https://github.com/michaeljabbour/amplifier-bundle-idd@main --name idd
 amplifier bundle use idd
 amplifier
 ```
 
-Or run directly:
+Or run directly with a local clone:
 
 ```bash
-amplifier run --mode chat --bundle idd
+amplifier run --mode chat --bundle /path/to/amplifier-bundle-idd/bundle.md
 ```
 
 Once active, the LLM gains two IDD tools (`idd_decompose`, `idd_compile`),
