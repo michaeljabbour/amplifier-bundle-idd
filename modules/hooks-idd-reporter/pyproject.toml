@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-module-hooks-idd-reporter"
+version = "0.1.0"
+description = "IDD Layer 2-to-1 reporter hook - translates execution state to human-readable intent-level reports"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.entry-points."amplifier.modules"]
+hooks-idd-reporter = "amplifier_module_hooks_idd_reporter:mount"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_hooks_idd_reporter"]

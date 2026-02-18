@@ -1,0 +1,19 @@
+[project]
+name = "amplifier-bundle-idd"
+version = "0.1.0"
+description = "Intent-Driven Design bundle for Amplifier"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = [
+    "tests",
+    "modules/orchestrator-idd",
+    "modules/hooks-idd-events",
+    "modules/hooks-idd-grammar-inject",
+    "modules/hooks-idd-reporter",
+]
+
+[tool.ruff]
+line-length = 100

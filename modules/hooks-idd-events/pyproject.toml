@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-module-hooks-idd-events"
+version = "0.1.0"
+description = "IDD event emission hook - emits idd:* events for telemetry and observability"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.entry-points."amplifier.modules"]
+hooks-idd-events = "amplifier_module_hooks_idd_events:mount"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_hooks_idd_events"]

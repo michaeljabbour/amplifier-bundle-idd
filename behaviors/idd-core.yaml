@@ -1,0 +1,30 @@
+bundle:
+  name: idd-core-behavior
+  version: 0.1.0
+  description: IDD Layer 2 machinery - orchestrator wrapper and hooks
+
+session:
+  orchestrator:
+    module: orchestrator-idd
+    source: ../modules/orchestrator-idd
+    config:
+      inner_orchestrator: loop-streaming
+
+hooks:
+  - module: hooks-idd-events
+    source: ../modules/hooks-idd-events
+    config: {}
+
+  - module: hooks-idd-grammar-inject
+    source: ../modules/hooks-idd-grammar-inject
+    config:
+      priority: 3
+
+  - module: hooks-idd-reporter
+    source: ../modules/hooks-idd-reporter
+    config:
+      priority: 15
+
+context:
+  include:
+    - idd:context/idd-awareness.md

@@ -1,0 +1,19 @@
+# amplifier-bundle-idd
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+*.swp
+*.swo
+*~
+.DS_Store
+~$*
+*.tmp
+
+# IDD spec documents (binary, not for version control)
+amplifier-idd-spec.docx
+amplifier-idd-spec2.docx
+amplifier-idd-spec3.docx

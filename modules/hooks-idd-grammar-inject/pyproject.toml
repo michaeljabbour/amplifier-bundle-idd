@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-module-hooks-idd-grammar-inject"
+version = "0.1.0"
+description = "IDD Grammar injection hook - injects Grammar state into LLM context per turn"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.entry-points."amplifier.modules"]
+hooks-idd-grammar-inject = "amplifier_module_hooks_idd_grammar_inject:mount"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_hooks_idd_grammar_inject"]

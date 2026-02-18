@@ -1,0 +1,10 @@
+{
+  "extraPaths": [
+    "modules/orchestrator-idd",
+    "modules/hooks-idd-events",
+    "modules/hooks-idd-grammar-inject",
+    "modules/hooks-idd-reporter",
+    "tests"
+  ],
+  "reportMissingModuleSource": false
+}
