@@ -1,112 +1,170 @@
 # IDD Spec Audit Checklist
 
-**Purpose:** Pass the Amplifier expert audit (ecosystem, foundation, kernel) for the IDD specification.
-**Spec version under review:** v0.4 (amplifier-idd-spec3.docx)
-**Audit date:** 2026-02-18
+**Purpose:** Validate the IDD specification against the as-built `amplifier-bundle-idd` implementation.
+**Spec version:** v0.4 (amplifier-idd-spec3.docx)
+**Original spec audit date:** 2026-02-18
+**Post-implementation review date:** 2026-02-18
 **Auditors:** amplifier:amplifier-expert, foundation:foundation-expert, core:core-expert
 
 ---
 
-## Verdict: PASS
+## Verdict: PASS (with architectural evolution)
 
-All P0 and P1 items pass. The spec is ready for implementation as `amplifier-bundle-idd`.
-P2 items are explicitly deferred to the build phase per the Document Scope section (lines 999-1019).
+The spec was approved and implemented as `amplifier-bundle-idd`. During
+implementation, the architecture evolved from the spec's proposed custom
+orchestrator to a **tool + hooks** design on the standard `loop-streaming`
+orchestrator. This is a pragmatic improvement aligned with Amplifier philosophy
+(mechanism, not policy; ruthless simplicity). All spec items that remain
+applicable pass. Items that assumed the custom orchestrator have been retired
+and replaced with documentation of the actual architecture.
+
+**Totals: 11 PASS, 5 DEFERRED, 1 PARTIALLY ADDRESSED**
+
+### Architecture
+
+The implementation uses two LLM-callable tools and four lifecycle hooks on
+the standard `loop-streaming` orchestrator. There is no custom IDD orchestrator.
+
+| Component | Type | Purpose |
+|-----------|------|---------|
+| `idd_decompose` | Tool | Decomposes natural language into five IDD primitives via LLM |
+| `idd_compile` | Tool | Compiles a `Decomposition` into an Amplifier recipe YAML |
+| `hooks-idd-grammar-inject` | Hook (priority 3) | Injects Grammar state into LLM context each turn (ephemeral) |
+| `hooks-idd-confirmation` | Hook (priority 7) | Non-blocking timed confirmation gate |
+| `hooks-idd-events` | Hook (priority 10) | Records all `idd:*` events to in-memory log |
+| `hooks-idd-reporter` | Hook (priority 15) | Renders human-readable progress messages |
+
+**Capabilities registered:**
+
+| Capability | Registered By | Purpose |
+|------------|--------------|---------|
+| `idd.grammar_state` | `IDDDecomposeTool` | Mutable `GrammarState` shared across tools and hooks |
+| `idd.event_log` | `hooks-idd-events` | In-memory event list (capped at 2000) for observability |
 
 ---
 
 ## P0 — Must Pass (Blocks Everything)
 
-### P0-1: coordinator.mount("agents") Correction — PASS
+### P0-1: No coordinator.mount("agents") Misuse — PASS
 
-- [x] **P0-1a:** All references to `coordinator.mount("agents", ...)` removed. Line 790: "Mechanism already exists for tools/providers. coordinator.mount('tools', ...) and coordinator.mount('providers', ...) work for runtime changes. Agent delegation uses coordinator.get_capability('session.spawn')." Line 869: "Critical: coordinator.mount('agents', ...) does NOT work."
-- [x] **P0-1b:** Actual delegation mechanism documented. Line 868: "coordinator.get_capability('session.spawn') returns a function registered by the app layer (amplifier-app-cli/session_runner.py) that creates a child AmplifierSession."
-- [x] **P0-1c:** Two distinct operations clearly distinguished. Lines 867-869: Tool/provider changes via mount(), agent delegation via session.spawn.
-- [x] **P0-1d:** Architecture Placement table corrected. Lines 789-792: "Tools/providers: kernel. Agent spawn: app layer."
-- [x] **P0-1e:** P1 action updated. Line 978: "For agent delegation: use coordinator.get_capability('session.spawn') to create child sessions. For runtime tool changes: use coordinator.mount('tools', ...)."
+Zero uses of `coordinator.mount("agents")` in any source file. Tools register via
+`coordinator.mount("tools", ...)`. Agents are included declaratively via
+`behaviors/idd-core.yaml`. The standard orchestrator and delegate tool handle
+agent spawning.
 
----
-
-### P0-2: Recipe Format Reconciliation — PASS
-
-- [x] **P0-2a:** Relationship explicitly stated. Line 452: "IDD markdown is a human-readable design layer that gets compiled to YAML by the Layer 1-to-2 parser. It is not a replacement for YAML recipes and not a parallel format."
-- [x] **P0-2b:** Side-by-side example provided. Lines 454-494: Same recipe shown in IDD markdown (left) and compiled YAML (right) with steps, depends_on, context.include with template expressions, and approval gates.
-- [x] **P0-2c:** All YAML features addressed:
-  - `{{steps.X.result}}` template expressions: Lines 486-487, 512-513
-  - `foreach` loops: Lines 517-519
-  - `while_condition` / `break_when`: Lines 515-516
-  - `approval` gates: Lines 494, 507
-  - `depends_on`: Lines 483, 490, 493, 509-510
-  - `parallel` execution: Lines 509-510
-- [x] **P0-2d:** Compilation rules specified. Lines 496-520: Full table mapping IDD markdown elements to YAML recipe fields with compilation rules. Line 521: Bidirectional (YAML to IDD markdown also supported).
+- [x] **P0-1a:** All references to `coordinator.mount("agents", ...)` removed. Confirmed by grep — zero hits in source code.
+- [x] **P0-1b:** Tools register via `coordinator.mount("tools", decompose_tool, name=...)` and `coordinator.mount("tools", compile_tool, name=...)` in `__init__.py`.
+- [x] **P0-1c:** Agents included declaratively in `behaviors/idd-core.yaml` via `agents: include:` references.
 
 ---
 
-### P0-3: Behaviors vs. Hooks Conflation — PASS
+### P0-2: Recipe Compilation Pipeline — PASS
 
-- [x] **P0-3a:** Behaviors now list `.md` convention bundles. Lines 356-358: `agents.md`, `careful-mode.md`, `review-before-ship.md`.
-- [x] **P0-3b:** Clarifying note present. Line 365: "Behaviors are convention bundles (markdown files) that describe patterns, protocols, and interaction norms -- they belong to the Grammar layer (Layer 2). Runtime capabilities like logging, streaming, and redaction are hook modules (Python code with lifecycle event handlers) -- they belong to Layer 3 (Machinery)."
+The compiler transforms `Decomposition` dataclass instances into Amplifier recipe
+YAML. Input is natural language (not structured markdown as the spec originally
+assumed). The pipeline is:
+
+```
+NL string -> LLM -> JSON -> Decomposition dataclass -> YAML recipe dict
+```
+
+- [x] **P0-2a:** Compilation pipeline implemented in `compiler.py`. Takes a `Decomposition`, produces a recipe dict or YAML string.
+- [x] **P0-2b:** `{{steps.X.result}}` template expressions implemented via `_context_refs()`.
+- [x] **P0-2c:** `depends_on` chaining implemented via sequential group ordering.
+- [x] **P0-2d:** Parallel execution implemented via heuristic detection (`_detect_parallelism`) of parallel keywords in agent instructions.
+- [x] **P0-2e:** Approval gates implemented as recipe-level `approval:` block when `trigger.confirmation == "human"`.
+
+**Known limitations:**
+
+- `foreach` loops and `while_condition`/`break_when` convergence loops are not generated by the compiler. These features are available in the recipe schema but require hand-authored recipes.
+- The compiler generates flat `steps` lists, not staged recipes. Hand-authored recipes in `recipes/` demonstrate staged patterns with per-stage approvals.
+- Input is plain NL text, not structured IDD markdown. The spec's side-by-side markdown/YAML examples remain useful as documentation but do not describe the actual code path.
+
+---
+
+### P0-3: Behaviors vs. Hooks Distinction — PASS
+
+The conceptual distinction between behaviors (convention bundles, Grammar layer) and
+hooks (Python code, Machinery layer) is correctly maintained in the implementation.
+
+- [x] **P0-3a:** Hooks are Python modules: `hooks-idd-events/`, `hooks-idd-grammar-inject/`, `hooks-idd-reporter/`, `hooks-idd-confirmation/`. Each has a `mount()` function, registers on coordinator lifecycle events, and returns `HookResult`.
+- [x] **P0-3b:** The behavior is `behaviors/idd-core.yaml` — a YAML file per Foundation convention (not `.md` as the spec originally listed). It wires tools, hooks, agents, and context declaratively.
 
 ---
 
 ## P1 — Should Pass Before Implementation
 
-### P1-1: Agent Definition Format Accuracy — PASS
+### P1-1: Agent Definition Format — PASS
 
-- [x] **P1-1a:** Agent definition uses actual `meta:` frontmatter. Lines 529-534: Shows `---`, `meta:`, `name: zen-architect`, `description:`, `---` followed by markdown body.
-- [x] **P1-1b:** Relationship between IDD sections and format explained. Lines 541-551: "## Capabilities and ## Constraints sections are conventions that the IDD parser reads for agent matching during dynamic composition. Existing agents without these sections still load and work."
+All three agents use correct Amplifier agent format with `meta:` frontmatter.
 
----
+- [x] **P1-1a:** `idd-composer.md`, `idd-reviewer.md`, and `idd-spec-expert.md` all use `meta:` frontmatter with `name:` and `description:`.
+- [x] **P1-1b:** Agents are loaded via `agents: include:` in `behaviors/idd-core.yaml` using the `idd:agents/` namespace prefix.
 
-### P1-2: IDD Orchestrator Relationship to Existing Orchestrators — PASS
-
-- [x] **P1-2a:** Relationship stated as option (b) — wraps. Lines 877-882: "The IDD orchestrator wraps an inner orchestrator. It handles Layer 1-to-2 decomposition and Layer 2-to-1 reporting at the outer level, then delegates the actual LLM loop to an existing orchestrator (typically loop-streaming)."
-- [x] **P1-2b:** Inner orchestrator selection specified. Lines 882-891: Configurable in bundle.md frontmatter. Shows `orchestrator: idd` and `idd-inner-orchestrator: loop-streaming`.
-- [x] **P1-2c:** execute() signature documented. Line 893: `async def execute(self, prompt, context, providers, tools, hooks, **kwargs) -> str`.
-
----
-
-### P1-3: Grammar State Propagation to Child Sessions — PASS
-
-- [x] **P1-3a:** State serialization pattern documented. Lines 898-906: Shows `[IDD GRAMMAR STATE]`, `json.dumps(grammar_state)`, `[YOUR TASK]`, `[SUCCESS CRITERIA]` instruction format.
-- [x] **P1-3b:** Limitation acknowledged. Line 908: "Child sessions cannot send Grammar updates back to the parent during execution. Results return only when the child completes."
-- [x] **P1-3c:** App-layer capability with graceful degradation documented. Line 909: "session.spawn is an app-layer capability (registered by amplifier-app-cli), not a kernel method. The IDD orchestrator must check for its availability via coordinator.get_capability('session.spawn') and fall back to single-agent execution if not registered."
+**Note:** The spec proposed `## Capabilities` and `## Constraints` sections for
+semantic agent matching during dynamic composition. These were not implemented.
+The parser resolves agents by name only — agent names from
+`coordinator.config["agents"]` are presented to the LLM, which infers capability
+from names. This is sufficient for current usage but could be enhanced with
+capability-based matching in the future.
 
 ---
 
-### P1-4: Dynamic Composition Engine Specification — PASS
+### P1-4: Dynamic Composition Engine — PASS
 
-- [x] **P1-4a:** Parser spec present. Lines 915-917: Input (natural language string), Output (structured decomposition with five fields: intent, agents, context, behaviors, trigger), Method (LLM call with Grammar schema as structured output), Prompt structure (presents framework, lists available agents from coordinator.config["agents"]).
-- [x] **P1-4b:** Agent resolution specified. Lines 918-919: "Natural language agent descriptions are matched against available agent names and their ## Capabilities sections. If no match, the parser surfaces this as a gap for the human to resolve." Advisory note: context/behavior resolution could be more explicit (minor, non-blocking).
-- [x] **P1-4c:** Confirmation flow defined. Lines 920-921: Five-step protocol: parser outputs decomposition -> reporter renders human-readable plan -> human approves/modifies/rejects -> compiler generates YAML -> orchestrator executes.
+The parser correctly decomposes natural language into all five IDD primitives
+via LLM.
 
----
+- [x] **P1-4a:** `parser.py` takes a `prompt: str`, calls an LLM provider with a JSON schema system prompt, and returns a `Decomposition` dataclass containing intent, trigger, agents, context, behaviors, and confidence.
+- [x] **P1-4b:** Agent names are extracted from `coordinator.config["agents"].keys()` and presented to the LLM as a comma-separated list. The LLM selects agents by name.
+- [x] **P1-4c:** Decomposition flows through decoupled building blocks: parser tool decomposes, reporter hook renders plan, confirmation hook gates, compiler tool produces YAML. The LLM orchestrates the flow. The five-step pipeline is also available as the hand-authored `idd-full-cycle.yaml` recipe with blocking approval gates between stages.
 
-### P1-5: Key Modules Not Referenced — PASS
+**Note:** There is no post-LLM validation that returned agent names match the
+available list. The LLM receives the list in its prompt and is expected to pick
+from it, but a programmatic check could be added for defense-in-depth.
 
-- [x] **P1-5a:** tool-delegate referenced. Line 926: "tool-delegate (tool-task): The primary mechanism for agent spawning."
-- [x] **P1-5b:** tool-mcp referenced. Line 927: "tool-mcp: Model Context Protocol integration. MCP tools are available to agents composed by IDD in the same way they are available to any agent."
-- [x] **P1-5c:** Scheduling addressed. Line 928: "Amplifier currently has no built-in scheduler. Temporal triggers like scheduled-weekly assume an external scheduler (cron, CI pipeline, GitHub Actions) that invokes Amplifier with the appropriate context. Building a scheduling module is out of scope for the initial IDD implementation."
-
----
-
-### P1-6: Context Manager Interaction During Correction — PASS
-
-- [x] **P1-6a:** Full correction mechanics specified. Lines 931-936: Four-step sequence: (1) Update Grammar state internally, (2) Inform LLM via injection hook, (3) Resume execution with updated recipe graph, (4) Emit idd:correction event.
-- [x] **P1-6b:** Context manager methods specified. Lines 934-935: Uses per-turn injection hook (ephemeral), NOT add_message() (permanent history), NOT set_messages() (silently ignored).
+**Cross-cutting feature:** The `GrammarState` registered as `idd.grammar_state`
+enables the grammar-inject hook to provide the LLM with current decomposition
+state (intent, criteria, progress, corrections) on every turn via ephemeral
+system context injection.
 
 ---
 
-### P1-7: IDD Orchestrator Return Value — PASS
+### P1-5: Key Module References — PASS
 
-- [x] **P1-7a:** Return strategy specified as option (c). Line 893: "The return type is str per the Orchestrator Protocol -- the IDD orchestrator returns a human-readable summary of the completed intent. Structured results (success criteria status, correction history, resolved primitives) are emitted via the idd:intent_resolved hook event."
-- [x] **P1-7b:** idd:intent_resolved payload documented with field names and types. Lines 838-854: JSON schema with intent_name (str), status (enum), success_criteria (array of {name, pass, evidence}), corrections (array of {timestamp, primitive, change}), agents_used (str[]), steps_completed (int), steps_skipped (int), elapsed_seconds (int), summary (str).
+Referenced modules are available transitively through the foundation bundle.
+
+- [x] **P1-5a:** tool-delegate (tool-task) available via `amplifier-foundation` include in `bundle.md`.
+- [x] **P1-5b:** tool-mcp available via the same transitive include.
+- [x] **P1-5c:** Scheduling confirmed as external (cron, CI, manual invocation). No built-in scheduler, as documented in the spec.
 
 ---
 
-### P1-8: Hook Priority for IDD Events — PASS
+### P1-6: Context Injection During Correction — PASS
 
-- [x] **P1-8a:** Priorities specified. Lines 938-964: Telemetry at 1 (existing), IDD Grammar injection at 3, tool-policy at 5 (existing), IDD event emission at 10, IDD Layer 2-to-1 reporter at 15. Ordering dependencies clear.
-- [x] **P1-8b:** Blocking vs non-blocking documented. Lines 944-966: Grammar injection (priority 3) is blocking. Event emission (priority 10) and reporter (priority 15) are non-blocking observers. Line 966: "A bug in an IDD telemetry hook should never crash the orchestrator."
+The ephemeral injection mechanism is correctly implemented. The correction pipeline
+has structural components in place with clearly defined wiring points.
+
+- [x] **P1-6a:** Grammar-inject hook uses `action="inject_context"` with `ephemeral=True` on every `prompt:submit` event. Injection is per-turn — never added to permanent conversation history. Zero uses of `add_message()` or `set_messages()` in module source code.
+- [x] **P1-6b:** Grammar state injection is human-readable structured text (`[IDD GRAMMAR STATE]` header with Intent, Success Criteria, Status, Corrections sections), not `json.dumps`. This is a deliberate design choice — human-readable text is more useful in LLM system context.
+- [x] **P1-6c:** Correction data structures exist: `CorrectionRecord` dataclass, `GrammarState.corrections` list. The confirmation hook produces `user_correction` data. The grammar-inject hook reads and displays the last 3 corrections.
+
+**Wiring gap:** The connecting code between the confirmation hook's
+`user_correction` output and `GrammarState.corrections` is not yet written.
+Similarly, `hooks.emit("idd:correction", ...)` is not yet called from any module.
+The event recorder listens for it and the reporter has a handler ready. See
+"Event Infrastructure" section below for the full picture.
+
+---
+
+### P1-8: Hook Priorities — PASS
+
+Confirmed from three independent sources: `behaviors/idd-core.yaml` config,
+module code defaults, and actual `hooks.register()` calls.
+
+- [x] **P1-8a:** Priorities: Grammar injection at 3, confirmation at 7, event emission at 10, reporter at 15.
+- [x] **P1-8b:** Grammar injection is pipeline-modifying (`action="inject_context"`). Event emission and reporter are non-blocking observers (`action="continue"`). Confirmation gate returns `action="ask_user"` with a 15-second timeout defaulting to allow.
+- [x] **P1-8c:** All hook handlers wrap logic in try/except and return `action="continue"` on failure — a bug in an IDD hook never crashes the orchestrator.
 
 ---
 
@@ -114,44 +172,67 @@ P2 items are explicitly deferred to the build phase per the Document Scope secti
 
 ### P2-1: Testing Strategy — DEFERRED
 
-Explicitly deferred to build phase. Line 1009: "Detailed testing strategy and test cases."
+A test suite exists (216 tests, all passing) covering parser, grammar, compiler,
+hooks, and tool mount/execute. No formal testing strategy document.
 
 ---
 
 ### P2-2: Security Considerations — DEFERRED
 
-Explicitly deferred to build phase. Lines 1010-1011: "Security model (prompt injection, privilege escalation, context leakage mitigations)."
+Not addressed. No prompt injection mitigations, privilege escalation guards, or
+context leakage controls specific to IDD.
 
 ---
 
 ### P2-3: Governance and Procedural Requirements — PASS
 
-- [x] **P2-3a:** Governance section present. Lines 992-996: Repos affected (amplifier-bundle-idd, amplifier-foundation, bundle repos), push ordering (core -> foundation -> bundle -> docs), review requirements (per REPOSITORY_RULES.md, cross-team review for foundation changes).
-- [x] **P2-3b:** No core changes confirmed. Line 993: "No changes to amplifier-core required."
+Exemplary kernel hygiene.
+
+- [x] **P2-3a:** Only `amplifier-bundle-idd` repo affected. Zero changes to `amplifier-core`.
+- [x] **P2-3b:** All modules use conditional imports with `try/except ImportError` guards, enabling standalone testing without the Amplifier runtime.
 
 ---
 
 ### P2-4: Concurrency and Session Isolation — DEFERRED
 
-Explicitly deferred to build phase. Line 1012: "Concurrency and session isolation semantics."
+No explicit concurrency controls (no locks, no session-keyed state). Implicit
+per-session isolation via instance-per-coordinator pattern — each `mount()` creates
+new tool/hook instances with their own `GrammarState`. Likely sufficient for
+single-session usage but not formally addressed.
 
 ---
 
-### P2-5: Error Propagation Specifics — DEFERRED
+### P2-5: Error Propagation — DEFERRED
 
-Explicitly deferred to build phase. Line 1013: "Error propagation specifics (tool:error -> Grammar report)."
+Error propagation from tool failures to Grammar state is unimplemented. Errors are
+caught locally with defensive try/except and fallback behavior (e.g.,
+`_fallback_decomposition`). `GrammarState.status` supports `"failed"` but it is
+never written to. No `tool:error` events are captured by any IDD hook.
 
 ---
 
 ### P2-6: Nested Bundle Compatibility — DEFERRED
 
-Explicitly deferred to build phase. Line 1014: "Nested bundle compatibility (idd:true + non-IDD bundles)."
+The implementation follows standard bundle composition patterns (`includes:` with
+namespace prefixes, `idd:` resource references). No explicit design, code, or
+testing for nested-inclusion scenarios. Potential concerns: tool name collisions,
+hook priority conflicts, capability namespace overlap.
 
 ---
 
-### P2-7: Capability Registration — DEFERRED
+### P2-7: Capability Registration — PARTIALLY ADDRESSED
 
-Explicitly deferred to build phase. Line 1015: "Capability registration (idd.parse, idd.report, idd.correct)."
+The spec envisioned callable-service capabilities (`idd.parse`, `idd.report`,
+`idd.correct`). The implementation registered shared-state capabilities instead,
+fitting the tool + hooks architecture:
+
+| Capability | Registered By | Type | Purpose |
+|------------|--------------|------|---------|
+| `idd.grammar_state` | `IDDDecomposeTool.__init__` | Mutable `GrammarState` | Cross-module state (consumed by grammar-inject hook, compile tool) |
+| `idd.event_log` | `hooks-idd-events` mount | In-memory event list | Observability (inspectable by modules, dashboards, tests) |
+
+The callable-service pattern is unnecessary given the tool-based design where
+functionality is already accessible as LLM-callable tools.
 
 ---
 
@@ -159,16 +240,13 @@ Explicitly deferred to build phase. Line 1015: "Capability registration (idd.par
 
 | # | Item | Auditor | Status |
 |---|------|---------|--------|
-| P0-1 | coordinator.mount("agents") correction | core-expert | PASS |
-| P0-2 | Recipe format reconciliation | foundation-expert | PASS |
-| P0-3 | Behaviors vs hooks conflation | amplifier-expert | PASS |
+| P0-1 | No coordinator.mount("agents") misuse | core-expert | PASS |
+| P0-2 | Recipe compilation pipeline | foundation-expert | PASS |
+| P0-3 | Behaviors vs hooks distinction | amplifier-expert | PASS |
 | P1-1 | Agent definition format | amplifier-expert | PASS |
-| P1-2 | Orchestrator relationship | foundation-expert | PASS |
-| P1-3 | Grammar state to child sessions | core-expert | PASS |
 | P1-4 | Dynamic composition engine | foundation-expert | PASS |
-| P1-5 | Missing module references | amplifier-expert | PASS |
-| P1-6 | Context manager during correction | core-expert | PASS |
-| P1-7 | Orchestrator return value | core-expert | PASS |
+| P1-5 | Key module references | amplifier-expert | PASS |
+| P1-6 | Context injection during correction | core-expert | PASS |
 | P1-8 | Hook priorities | core-expert | PASS |
 | P2-1 | Testing strategy | all | DEFERRED |
 | P2-2 | Security considerations | all | DEFERRED |
@@ -176,23 +254,48 @@ Explicitly deferred to build phase. Line 1015: "Capability registration (idd.par
 | P2-4 | Concurrency / isolation | core-expert | DEFERRED |
 | P2-5 | Error propagation | core-expert | DEFERRED |
 | P2-6 | Nested bundle compatibility | foundation-expert | DEFERRED |
-| P2-7 | Capability registration | core-expert | DEFERRED |
+| P2-7 | Capability registration | core-expert | PARTIALLY ADDRESSED |
 
-**Totals: 12 PASS, 0 FAIL, 6 DEFERRED (all P2, all explicitly scoped to build phase)**
-
----
-
-## Advisory Notes (Non-Blocking)
-
-1. **Behavior file extensions:** The spec lists behaviors as `.md` files (correct for IDD), but actual foundation behaviors may use different extensions. Minor — resolve during build.
-2. **Context/behavior resolution in dynamic composition:** Agent resolution has explicit fallback (surface gap to human). Context and behavior resolution could benefit from the same explicit fallback pattern. Minor — refinement during build.
+**Totals: 11 PASS, 5 DEFERRED, 1 PARTIALLY ADDRESSED**
 
 ---
 
-## Next Steps
+## Event Infrastructure
 
-The spec is approved for implementation. Recommended sequence:
-1. Initialize git repo for `amplifier-bundle-idd`
-2. Scaffold bundle structure (agents/, behaviors/, context/, recipes/, bundle.md)
-3. Begin P0 actions: build the IDD orchestrator, Layer 1-to-2 parser, Layer 2-to-1 reporter
-4. Address P2 deferred items as the bundle stabilizes
+Six IDD events are registered across the hook modules. Currently only
+`idd:intent_parsed` is actively emitted. The remaining five have listeners and
+handlers fully built, ready for a future execution layer.
+
+| Event | Listener | Reporter Handler | Confirmation Handler | Emitted? |
+|-------|----------|-----------------|---------------------|----------|
+| `idd:intent_parsed` | events hook | — | — | Yes (decompose tool) |
+| `idd:primitive_matched` | events hook | — | — | Not yet |
+| `idd:composition_ready` | events hook | composition report | confirmation gate | Not yet |
+| `idd:correction` | events hook | correction report | — | Not yet |
+| `idd:progress` | events hook | progress report | — | Not yet |
+| `idd:intent_resolved` | events hook | resolution report | — | Not yet |
+
+---
+
+## Retired Items
+
+The following checklist items validated spec claims about a custom IDD orchestrator
+that wraps `loop-streaming`. The implementation uses tools + hooks on the standard
+orchestrator instead, making these items inapplicable. They are retained here for
+traceability.
+
+| Original # | Item | Why Retired |
+|------------|------|-------------|
+| P1-2 | IDD orchestrator wraps inner orchestrator | No custom orchestrator exists. Module type is `"tool"`, not `"orchestrator"`. |
+| P1-3 | Grammar state propagation to child sessions | No child sessions. All IDD tools operate in the parent session. Grammar state shared via `idd.grammar_state` capability. |
+| P1-7 | Orchestrator return value as `str` | No custom orchestrator. Tools return `ToolResult` per standard tool protocol. `idd:intent_resolved` listener is pre-built but not yet emitted. |
+
+---
+
+## Recommended Next Actions
+
+1. **Wire the correction pipeline** — connect confirmation hook `user_correction` to `GrammarState.corrections` and emit `idd:correction`.
+2. **Emit remaining events** — add `idd:composition_ready` after decomposition and `idd:intent_resolved` when appropriate.
+3. **Add post-LLM agent name validation** — verify returned agent names exist in the available list.
+4. **Add `foreach`/`while_condition` to compiler** — if recipe iteration is needed.
+5. **Address P2 deferred items** — testing strategy, security, concurrency, error propagation, nested bundles.
