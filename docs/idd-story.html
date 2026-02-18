@@ -1341,16 +1341,23 @@
     var prev = slides[current];
     var next = slides[n];
 
+    // Animate previous slide out
     prev.classList.remove('active');
-    prev.classList.add('exiting');
     prev.style.transform = direction > 0 ? 'translateX(-40px)' : 'translateX(40px)';
+    prev.style.opacity = '0';
 
+    // Position next slide at its entry point (no transition)
+    next.style.transition = 'none';
     next.style.transform = direction > 0 ? 'translateX(40px)' : 'translateX(-40px)';
     next.style.opacity = '0';
-    next.classList.remove('exiting');
 
+    // Force reflow so the browser registers the starting position
     void next.offsetWidth;
 
+    // Re-enable transitions and animate to final position
+    next.style.transition = '';
+    next.style.transform = 'translateX(0)';
+    next.style.opacity = '1';
     next.classList.add('active');
 
     navDots.children[current].classList.remove('active');
@@ -1360,9 +1367,11 @@
     updateCounter();
 
     setTimeout(function() {
-      prev.classList.remove('exiting');
+      // Clean up all inline styles from both slides
       prev.style.transform = '';
       prev.style.opacity = '';
+      next.style.transform = '';
+      next.style.opacity = '';
       transitioning = false;
     }, 500);
   }
