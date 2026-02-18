@@ -1,0 +1,82 @@
+name: idd-decompose
+description: |
+  Decompose a natural-language task description into the five IDD primitives
+  (Intent, Trigger, Agent, Context, Behavior). The composer produces a structured
+  decomposition, then the reviewer validates it against the IDD specification.
+  An approval gate lets the human confirm before the composition is finalized.
+version: "1.0.0"
+
+context:
+  task_description: ""
+
+stages:
+  - name: decompose-and-validate
+    steps:
+      - id: decompose
+        agent: idd:idd-composer
+        prompt: |
+          Decompose the following task into the five IDD primitives using Decompose mode.
+
+          Task description:
+          {{task_description}}
+
+          Follow your full decomposition workflow:
+          1. Parse intent (WHY) first — derive the goal and 2-5 measurable success criteria
+          2. Identify trigger (WHEN) — activation condition, pre-conditions, confirmation mode
+          3. Match agents (WHO) — select from available agents, define roles and instructions
+          4. Identify context (WHAT) — auto-detected, provided, to-discover, and data flow
+          5. Select behaviors (HOW) — interaction patterns and quality standards
+          6. Run the decomposition test (orthogonality, separation, testability, completeness)
+          7. Present the complete structured decomposition using your output contract format
+        output: decomposition
+
+      - id: validate
+        agent: idd:idd-reviewer
+        prompt: |
+          Audit the following IDD decomposition for spec compliance.
+
+          {{decomposition}}
+
+          Execute your full audit protocol:
+          - Phase 1: Primitive completeness (all five present and populated)
+          - Phase 2: Primitive quality (measurability, orthogonality, clarity)
+          - Phase 3: Decomposition test (four-point mechanical test)
+          - Phase 4: Anti-pattern scan
+          - Phase 5: Layer separation check
+
+          Produce your standard audit report with PASS/FAIL verdict.
+        depends_on:
+          - decompose
+        output: audit_result
+
+    approval:
+      required: true
+      prompt: |
+        Review the IDD decomposition and audit results above.
+        Approve to finalize this composition, or deny to revise.
+
+  - name: finalize
+    steps:
+      - id: finalize-decomposition
+        agent: idd:idd-composer
+        prompt: |
+          Review the audit findings and present the final decomposition.
+
+          Original decomposition:
+          {{decomposition}}
+
+          Audit results:
+          {{audit_result}}
+
+          If the audit verdict is PASS or CONDITIONAL PASS:
+          - Present the decomposition as ready for compilation
+          - Note any INFO-level suggestions from the audit
+
+          If the audit verdict is FAIL:
+          - Switch to Refine mode
+          - Address each CRITICAL finding from the audit
+          - Present the refined decomposition
+
+          End with a clear statement: either "This composition is ready for recipe compilation"
+          or "These issues remain unresolved: [list]".
+        output: final_decomposition

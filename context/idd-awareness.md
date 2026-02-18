@@ -27,3 +27,26 @@ You can adjust the plan at any time by speaking at the intent level:
 - "Use the explorer instead" (adjusts agent)
 
 The system updates the Grammar and resumes without restarting.
+
+## IDD Expert Agents
+
+For deep IDD work, delegate to specialist agents:
+
+- **idd:idd-composer** -- Creates IDD decompositions from natural language.
+  Fills all five primitives, applies composition rules, compiles to recipe YAML.
+  Use for: breaking down tasks, designing workflows, writing IDD recipes.
+
+- **idd:idd-reviewer** -- Audits IDD compositions for spec compliance.
+  Runs the decomposition test, checks orthogonality, validates success criteria.
+  Use for: reviewing compositions, validating existing recipes/bundles.
+
+- **idd:idd-spec-expert** -- Authoritative on the full IDD specification.
+  Explains primitives, layers, composition rules, compilation, correction protocol.
+  Use for: questions about IDD itself, edge case classification, teaching.
+
+## IDD Recipes
+
+- `idd-decompose` -- Decompose a task into IDD primitives with validation
+- `idd-full-cycle` -- Full pipeline: decompose, review, approve, execute
+- `idd-audit` -- Audit existing artifacts for IDD compliance
+- `idd-teach` -- Interactive walkthrough of IDD concepts

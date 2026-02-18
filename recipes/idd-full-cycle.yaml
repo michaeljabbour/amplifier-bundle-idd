@@ -1,0 +1,125 @@
+name: idd-full-cycle
+description: |
+  End-to-end IDD lifecycle: decompose a task into five primitives, validate
+  the composition, get human approval, then execute the resulting plan.
+  Uses staged execution with an approval gate between design and execution.
+version: "1.0.0"
+
+context:
+  task_description: ""
+
+stages:
+  - name: design
+    steps:
+      - id: decompose
+        agent: idd:idd-composer
+        prompt: |
+          Decompose the following task into the five IDD primitives using Decompose mode.
+
+          Task description:
+          {{task_description}}
+
+          Follow your full decomposition workflow:
+          1. Parse intent (WHY) first — derive the goal and 2-5 measurable success criteria
+          2. Identify trigger (WHEN) — activation, pre-conditions, confirmation mode
+          3. Match agents (WHO) — select agents, define roles and instructions
+          4. Identify context (WHAT) — auto-detected, provided, to-discover, data flow
+          5. Select behaviors (HOW) — interaction patterns and quality standards
+          6. Run the decomposition test
+          7. Present the complete structured decomposition
+        output: decomposition
+
+      - id: validate
+        agent: idd:idd-reviewer
+        prompt: |
+          Audit the following IDD decomposition for spec compliance.
+
+          {{decomposition}}
+
+          Execute your full audit protocol across all five phases:
+          - Primitive completeness
+          - Primitive quality
+          - Decomposition test
+          - Anti-pattern scan
+          - Layer separation check
+
+          Produce your standard audit report with PASS/FAIL verdict.
+        depends_on:
+          - decompose
+        output: audit_result
+
+      - id: refine-if-needed
+        agent: idd:idd-composer
+        prompt: |
+          Review the audit results and finalize the decomposition.
+
+          Original decomposition:
+          {{decomposition}}
+
+          Audit results:
+          {{audit_result}}
+
+          If the audit PASSED: present the decomposition as-is, confirming it is ready.
+
+          If the audit FAILED: switch to Refine mode, fix all CRITICAL findings,
+          and present the refined decomposition. Show before/after for each fix.
+
+          End with the compilation-ready statement and a summary of the plan that
+          will execute in the next stage, so the human can make an informed approval.
+        depends_on:
+          - validate
+        output: approved_composition
+
+    approval:
+      required: true
+      prompt: |
+        The IDD design stage is complete. Review the composition and audit results.
+        Approve to proceed with execution, or deny to revise the design.
+
+  - name: execute
+    steps:
+      - id: execute-plan
+        agent: self
+        prompt: |
+          Execute the approved IDD composition from the design stage.
+
+          Approved composition:
+          {{approved_composition}}
+
+          For each agent assignment in the composition:
+          1. Spawn the designated agent with its instruction
+          2. Pass the required context (auto-detected + outputs from prior agents)
+          3. Apply the specified behaviors as interaction constraints
+          4. Collect the result
+
+          Track progress against the success criteria defined in the Intent.
+          After all agents complete, evaluate each success criterion and report:
+          - Which criteria passed (with evidence)
+          - Which criteria failed (with explanation)
+          - Overall verdict: intent resolved or intent partially resolved
+        output: execution_result
+
+      - id: verify-intent
+        agent: idd:idd-reviewer
+        prompt: |
+          Verify that the execution results satisfy the original intent.
+
+          Original composition:
+          {{approved_composition}}
+
+          Execution results:
+          {{execution_result}}
+
+          For each success criterion in the Intent:
+          - Determine if it was met based on the execution output
+          - Cite specific evidence from the results
+
+          Produce a final verdict:
+          - RESOLVED: All success criteria met
+          - PARTIALLY RESOLVED: Some criteria met, some not
+          - UNRESOLVED: Critical criteria not met
+
+          Include a summary suitable for Layer 1 (human-readable) reporting.
+        depends_on:
+          - execute-plan
+        output: final_verdict

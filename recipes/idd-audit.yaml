@@ -1,0 +1,93 @@
+name: idd-audit
+description: |
+  Audit an existing artifact (composition, recipe, or markdown spec) for IDD
+  compliance. Reads the target, runs a full IDD review, and suggests specific
+  fixes for any issues found.
+version: "1.0.0"
+
+context:
+  target_path: ""
+
+steps:
+  - id: read-target
+    agent: foundation:explorer
+    prompt: |
+      Read and analyze the artifact at the following path:
+
+      {{target_path}}
+
+      Provide the complete contents of the artifact along with a structural summary:
+      - What type of artifact is this? (IDD composition, YAML recipe, markdown spec, other)
+      - If it's a YAML recipe: list the steps, agents, and any approval gates
+      - If it's an IDD composition: list which of the five primitives are present
+      - If it's a markdown spec: identify the sections and their content
+      - Note any obvious structural issues (missing sections, empty fields)
+
+      Return the full artifact content and your structural analysis.
+    output: artifact_content
+
+  - id: audit
+    agent: idd:idd-reviewer
+    prompt: |
+      Audit the following artifact for IDD compliance.
+
+      Artifact contents and analysis:
+      {{artifact_content}}
+
+      If this is an IDD composition or markdown spec:
+      - Run your full audit protocol (all five phases)
+      - Produce your standard PASS/FAIL verdict
+
+      If this is a YAML recipe:
+      - Reverse-map the recipe steps to the five IDD primitives
+      - Check if Intent (WHY) is captured in metadata or description
+      - Check if Trigger (WHEN) is captured in approval gates or conditions
+      - Check if Agent (WHO) assignments are clear and non-redundant
+      - Check if Context (WHAT) flows correctly between steps
+      - Check if Behaviors (HOW) are referenced
+      - Run the decomposition test on the reconstructed primitives
+      - Produce your standard audit report
+
+      If this is not an IDD artifact:
+      - State that the artifact is not an IDD composition
+      - Identify what it would take to bring it into IDD compliance
+      - Suggest which primitives need to be added
+    depends_on:
+      - read-target
+    output: audit_result
+
+  - id: suggest-fixes
+    agent: idd:idd-composer
+    prompt: |
+      Based on the audit findings, suggest specific fixes to bring this artifact
+      into IDD compliance.
+
+      Original artifact:
+      {{artifact_content}}
+
+      Audit results:
+      {{audit_result}}
+
+      Use Refine mode to address each finding:
+
+      For CRITICAL findings:
+      - Show the exact change needed (before/after)
+      - Explain why the change fixes the issue
+
+      For WARNING findings:
+      - Suggest the improvement
+      - Explain the trade-off of fixing vs leaving as-is
+
+      For INFO findings:
+      - Note the suggestion briefly
+
+      If the audit passed with no findings, confirm the artifact is IDD-compliant
+      and suggest any optional improvements.
+
+      End with a summary:
+      - Total findings: [N critical, N warning, N info]
+      - Fixes proposed: [list]
+      - Estimated effort to reach compliance: [low/medium/high]
+    depends_on:
+      - audit
+    output: fix_suggestions

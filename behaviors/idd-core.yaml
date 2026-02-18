@@ -1,7 +1,7 @@
 bundle:
   name: idd-core-behavior
-  version: 0.1.0
-  description: IDD Layer 2 machinery - orchestrator wrapper and hooks
+  version: 0.2.0
+  description: IDD Layer 2 machinery - orchestrator, hooks, agents, and knowledge
 
 session:
   orchestrator:
@@ -24,6 +24,12 @@ hooks:
     source: ../modules/hooks-idd-reporter
     config:
       priority: 15
+
+agents:
+  include:
+    - idd:agents/idd-composer
+    - idd:agents/idd-reviewer
+    - idd:agents/idd-spec-expert
 
 context:
   include:

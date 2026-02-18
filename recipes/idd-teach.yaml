@@ -1,0 +1,125 @@
+name: idd-teach
+description: |
+  Interactive IDD onboarding session. Teaches the five primitives, walks through
+  a sample decomposition, and demonstrates the audit process. Adapts to the
+  user's skill level (beginner, intermediate, or advanced).
+version: "1.0.0"
+
+context:
+  skill_level: "beginner"
+
+steps:
+  - id: explain-fundamentals
+    agent: idd:idd-spec-expert
+    prompt: |
+      Teach IDD fundamentals to a user at the {{skill_level}} level.
+
+      Adapt your teaching approach based on skill level:
+
+      **If beginner:**
+      Start from first principles. Explain:
+      1. What IDD is and why it exists (the problem it solves)
+      2. The five primitives — one at a time, with a concrete example for each:
+         - Intent (WHY): Start here. Use "make onboarding faster" as the running example.
+         - Trigger (WHEN): When does this task activate?
+         - Agent (WHO): Who does the work?
+         - Context (WHAT): What knowledge is needed?
+         - Behavior (HOW): What interaction patterns apply?
+      3. The three layers (Voice, Grammar, Machinery) — keep it brief
+      4. Why orthogonality matters — show what happens when primitives are tangled
+
+      **If intermediate:**
+      Assume they know the basics. Focus on:
+      1. Quick refresher of the five primitives (table format)
+      2. The decomposition test — walk through all four checks with examples
+      3. Common anti-patterns and how to avoid them
+      4. Compilation rules: how IDD markdown maps to YAML recipes
+      5. Mid-flight correction protocol
+
+      **If advanced:**
+      Assume deep familiarity. Focus on:
+      1. Edge cases in primitive classification (with the classification guide)
+      2. Composition patterns for complex multi-agent workflows
+      3. Layer separation nuances (where behavior ends and machinery begins)
+      4. Recipe compilation details: parallelism detection, approval gates, context refs
+      5. Design trade-offs: when to use fewer vs more agents, scope boundary strategies
+
+      End with: "Ready for a hands-on decomposition exercise? The next step will walk
+      you through composing a real example."
+    output: fundamentals
+
+  - id: sample-decomposition
+    agent: idd:idd-composer
+    prompt: |
+      Walk the user through a hands-on IDD decomposition exercise. This is a teaching
+      moment — explain your reasoning at each step, not just the output.
+
+      Skill level: {{skill_level}}
+
+      Concepts already covered:
+      {{fundamentals}}
+
+      Choose an example appropriate to the skill level:
+
+      **If beginner:** Use a simple, relatable task:
+      "Set up automated code formatting for a Python project"
+      - Walk through each primitive slowly, explaining WHY you chose each value
+      - Highlight the orthogonality principle as you go
+
+      **If intermediate:** Use a moderately complex task:
+      "Design a PR review workflow that checks code quality, security, and test coverage"
+      - Show how multiple agents compose
+      - Demonstrate parallel vs sequential agent execution
+      - Point out where anti-patterns could creep in
+
+      **If advanced:** Use a complex task:
+      "Build a continuous documentation pipeline that watches for code changes,
+      generates API docs, validates examples, and publishes to multiple targets"
+      - Show sophisticated context data flow
+      - Demonstrate scope boundary decisions
+      - Show how behaviors layer onto agent assignments
+
+      For ALL levels:
+      1. Start by stating the natural-language task (Layer 1)
+      2. Walk through each primitive, explaining your reasoning
+      3. Run the decomposition test and explain each check
+      4. Show the final structured output
+      5. End with: "Now let's see what the reviewer thinks of this composition."
+    depends_on:
+      - explain-fundamentals
+    output: sample_composition
+
+  - id: demonstrate-audit
+    agent: idd:idd-reviewer
+    prompt: |
+      Demonstrate the IDD audit process by reviewing the sample decomposition.
+      This is a teaching exercise — explain your audit reasoning at each step.
+
+      Skill level: {{skill_level}}
+
+      Sample decomposition to audit:
+      {{sample_composition}}
+
+      Walk through your audit protocol, but narrate what you're doing and why:
+
+      1. **Primitive Completeness:** Check each primitive, explain what "complete" means
+      2. **Primitive Quality:** Explain what makes criteria measurable, what makes
+         instructions clear, etc.
+      3. **Decomposition Test:** Run each of the four checks and explain the reasoning
+      4. **Anti-Pattern Scan:** Show how you look for anti-patterns, even in a clean
+         composition (explain what you're checking for)
+      5. **Layer Separation:** Explain the layer model as you check for violations
+
+      Produce your standard audit report, then add a teaching summary:
+
+      **What to look for when reviewing IDD compositions:**
+      - [Key takeaway 1]
+      - [Key takeaway 2]
+      - [Key takeaway 3]
+
+      End with encouragement and a pointer to next steps:
+      "You now understand the core IDD workflow: decompose with the composer, validate
+      with the reviewer. To try it on your own tasks, use the idd-decompose recipe."
+    depends_on:
+      - sample-decomposition
+    output: audit_demo
