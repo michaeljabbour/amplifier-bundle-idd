@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intent-Driven Design — A Compositional Grammar for Agent Systems</title>
+<style>
+  /* ========== RESET & BASE ========== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #09090b;
+    --surface: #131316;
+    --surface-raised: #1a1a1f;
+    --border: #27272a;
+    --text: #fafafa;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent: #6366f1;
+    --accent-light: #818cf8;
+    --accent-glow: rgba(99, 102, 241, 0.15);
+    --accent-glow-strong: rgba(99, 102, 241, 0.3);
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.15);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.15);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.15);
+    --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ========== SLIDE ENGINE ========== */
+  .deck { position: relative; width: 100%; height: 100%; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    justify-content: center; align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+    overflow-y: auto;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+
+  .slide.exiting {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+
+  /* ========== TYPOGRAPHY ========== */
+  .slide-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--accent-light);
+    margin-bottom: 20px;
+  }
+
+  h1 {
+    font-size: clamp(36px, 5vw, 64px);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    font-size: clamp(28px, 3.5vw, 48px);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+    margin-bottom: 16px;
+  }
+
+  h3 {
+    font-size: clamp(18px, 2vw, 24px);
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    font-size: clamp(16px, 1.8vw, 22px);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    max-width: 700px;
+    text-align: center;
+  }
+
+  .big-quote {
+    font-size: clamp(22px, 2.8vw, 36px);
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text);
+    max-width: 800px;
+    text-align: center;
+    font-style: italic;
+  }
+
+  .big-quote::before { content: '\201C'; color: var(--accent-light); }
+  .big-quote::after { content: '\201D'; color: var(--accent-light); }
+
+  .accent { color: var(--accent-light); }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+  .amber { color: var(--amber); }
+  .dim { color: var(--text-muted); }
+
+  /* ========== LAYOUT ========== */
+  .content { width: 100%; max-width: 1100px; }
+  .content-wide { width: 100%; max-width: 1200px; }
+  .center-text { text-align: center; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .three-col {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  /* ========== CARDS ========== */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px;
+  }
+
+  .card-accent {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 28px;
+    box-shadow: 0 0 30px var(--accent-glow);
+  }
+
+  /* ========== TABLES ========== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 15px;
+  }
+
+  th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(39, 39, 42, 0.5);
+    color: var(--text-secondary);
+    line-height: 1.5;
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  td:first-child { color: var(--text); font-weight: 500; }
+
+  td.mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent-light);
+  }
+
+  .primitives-table td:first-child {
+    font-weight: 700;
+    font-size: 16px;
+    white-space: nowrap;
+  }
+
+  .primitives-table .q-col {
+    color: var(--accent-light);
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+
+  /* ========== PIPELINE ========== */
+  .pipeline {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    max-width: 1000px;
+    margin: 32px auto;
+  }
+
+  .phase {
+    flex: 1;
+    text-align: center;
+    padding: 24px 16px;
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .phase:first-child { border-radius: 12px 0 0 12px; }
+  .phase:last-child { border-radius: 0 12px 12px 0; }
+  .phase + .phase { border-left: none; }
+
+  .phase-num {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--accent-light);
+    margin-bottom: 8px;
+  }
+
+  .phase-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 6px;
+  }
+
+  .phase-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .phase-arrow {
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--accent-light);
+    font-size: 16px;
+    z-index: 2;
+    background: var(--bg);
+    padding: 2px;
+  }
+
+  /* ========== LAYER DIAGRAM ========== */
+  .layer-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    width: 100%;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .layer-row {
+    display: grid;
+    grid-template-columns: 100px 1fr 140px;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  .layer-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 18px 12px;
+  }
+
+  .layer-content {
+    padding: 18px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .layer-content.highlight {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    box-shadow: 0 0 40px var(--accent-glow);
+  }
+
+  .layer-audience {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 18px 12px;
+  }
+
+  /* ========== A/B COMPARISON ========== */
+  .ab-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    width: 100%;
+    max-width: 1050px;
+  }
+
+  .ab-side {
+    border-radius: 12px;
+    padding: 28px;
+  }
+
+  .ab-side.control {
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .ab-side.treatment {
+    background: var(--accent-glow);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+  }
+
+  .ab-side.winner-green {
+    background: var(--green-dim);
+    border: 1px solid rgba(52, 211, 153, 0.4);
+  }
+
+  .ab-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-bottom: 14px;
+  }
+
+  .ab-tag.control-tag {
+    background: rgba(113, 113, 122, 0.2);
+    color: var(--text-muted);
+  }
+
+  .ab-tag.idd-tag {
+    background: var(--accent-glow-strong);
+    color: var(--accent-light);
+  }
+
+  .ab-tag.winner-tag {
+    background: rgba(52, 211, 153, 0.25);
+    color: var(--green);
+  }
+
+  .ab-metric {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 6px 0;
+    font-size: 14px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .ab-metric:last-child { border-bottom: none; }
+
+  .ab-metric-value {
+    font-weight: 700;
+    font-family: var(--font-mono);
+    font-size: 15px;
+  }
+
+  /* ========== SCORECARD ========== */
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .score-item {
+    text-align: center;
+    padding: 24px 16px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .score-result {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .score-task {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  /* ========== ABSTRACTION STACK ========== */
+  .stack-table {
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .stack-row {
+    display: grid;
+    grid-template-columns: 180px 30px 1fr;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(39, 39, 42, 0.5);
+  }
+
+  .stack-row:last-child { border-bottom: none; }
+
+  .stack-before {
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .stack-arrow {
+    color: var(--accent-light);
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .stack-after {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .stack-row.current {
+    background: var(--accent-glow);
+    border-radius: 8px;
+    padding: 14px 16px;
+    border-bottom: none;
+    margin: 4px -16px;
+  }
+
+  .stack-row.current .stack-before { color: var(--text-secondary); }
+  .stack-row.current .stack-after { color: var(--accent-light); font-size: 16px; }
+
+  /* ========== STATS ========== */
+  .stats-row {
+    display: flex;
+    gap: 48px;
+    justify-content: center;
+    margin: 24px 0;
+  }
+
+  .stat { text-align: center; }
+
+  .stat-num {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--accent-light);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  /* ========== BULLETS ========== */
+  .bullets {
+    list-style: none;
+    padding: 0;
+  }
+
+  .bullets li {
+    position: relative;
+    padding: 6px 0 6px 20px;
+    font-size: 15px;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+
+  .bullets li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 14px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ========== VOICE TO GRAMMAR ========== */
+  .voice-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    font-style: italic;
+  }
+
+  .grammar-grid {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 2px;
+  }
+
+  .grammar-key {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--accent-light);
+    padding: 10px 12px;
+    display: flex;
+    align-items: flex-start;
+    padding-top: 13px;
+  }
+
+  .grammar-val {
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    border-left: 2px solid var(--border);
+    line-height: 1.5;
+  }
+
+  /* ========== ARCHITECTURE GRID ========== */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .arch-item {
+    text-align: center;
+    padding: 20px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .arch-num {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent-light);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .arch-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  /* ========== WINNER BADGE ========== */
+  .winner-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border-radius: 20px;
+    margin-top: 14px;
+  }
+
+  .winner-badge.idd {
+    background: var(--accent-glow-strong);
+    color: var(--accent-light);
+  }
+
+  .winner-badge.non-idd {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
+
+  /* ========== CONFIDENCE BAR ========== */
+  .confidence-bar {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 12px;
+    overflow: hidden;
+  }
+
+  .confidence-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--accent);
+  }
+
+  /* ========== NAVIGATION ========== */
+  .nav-dots {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .nav-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    padding: 0;
+  }
+
+  .nav-dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow-strong);
+    width: 24px;
+    border-radius: 4px;
+  }
+
+  .slide-counter {
+    position: fixed;
+    bottom: 26px;
+    right: 32px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    z-index: 100;
+  }
+
+  .click-prev, .click-next {
+    position: fixed;
+    top: 0;
+    width: 20%;
+    height: 100%;
+    z-index: 50;
+    cursor: pointer;
+  }
+  .click-prev { left: 0; }
+  .click-next { right: 0; }
+
+  /* ========== SPACERS ========== */
+  .spacer-sm { height: 16px; }
+  .spacer { height: 24px; }
+  .spacer-lg { height: 36px; }
+  .spacer-xl { height: 48px; }
+
+  /* ========== RESPONSIVE ========== */
+  @media (max-width: 768px) {
+    .slide { padding: 32px 24px; }
+    .two-col, .ab-compare { grid-template-columns: 1fr; }
+    .three-col { grid-template-columns: 1fr; }
+    .scorecard { grid-template-columns: repeat(2, 1fr); }
+    .pipeline { flex-direction: column; }
+    .phase:first-child { border-radius: 12px 12px 0 0; }
+    .phase:last-child { border-radius: 0 0 12px 12px; }
+    .phase + .phase { border-left: 1px solid var(--border); border-top: none; }
+    .phase-arrow { display: none; }
+    .arch-grid { grid-template-columns: repeat(3, 1fr); }
+    .stats-row { flex-wrap: wrap; gap: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- ==================== SLIDE 1: TITLE ==================== -->
+  <div class="slide active" data-slide="0">
+    <div class="slide-label">amplifier-bundle-idd</div>
+    <h1 class="center-text">Intent-Driven Design</h1>
+    <div class="spacer-sm"></div>
+    <p class="subtitle">A compositional grammar for agent systems.<br>Decompose every task into five orthogonal primitives.</p>
+    <div class="spacer-lg"></div>
+    <div style="display:flex; gap:32px; font-size:13px; color:var(--text-muted);">
+      <span>v0.3.0</span>
+      <span style="color:var(--border);">|</span>
+      <span>216 tests passing</span>
+      <span style="color:var(--border);">|</span>
+      <span>2026</span>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 2: THE PROBLEM ==================== -->
+  <div class="slide" data-slide="1">
+    <div class="slide-label">The Problem</div>
+    <h2 class="center-text">Agent development<br>has no shared grammar.</h2>
+    <div class="spacer"></div>
+    <div class="two-col" style="max-width:900px;">
+      <div class="card">
+        <h3 style="color:var(--text-muted); font-size:13px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px;">What frameworks abstract</h3>
+        <ul class="bullets">
+          <li>API call patterns</li>
+          <li>Token management</li>
+          <li>Tool routing</li>
+          <li>Model switching</li>
+        </ul>
+        <p style="margin-top:16px; font-size:13px; color:var(--text-muted);">The machinery of execution.</p>
+      </div>
+      <div class="card-accent">
+        <h3 style="color:var(--accent-light); font-size:13px; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:16px;">What they should abstract</h3>
+        <ul class="bullets">
+          <li>What are we trying to accomplish?</li>
+          <li>Who should do this work?</li>
+          <li>What does success look like?</li>
+          <li>In what order, under what constraints?</li>
+        </ul>
+        <p style="margin-top:16px; font-size:13px; color:var(--accent-light);">The intent behind the work.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 3: THE MISSING LAYER ==================== -->
+  <div class="slide" data-slide="2">
+    <div class="slide-label">The Insight</div>
+    <h2 class="center-text">Every abstraction layer<br>was once missing.</h2>
+    <div class="spacer"></div>
+    <div class="stack-table">
+      <div class="stack-row">
+        <div class="stack-before">Spaghetti scripts</div>
+        <div class="stack-arrow">&rarr;</div>
+        <div class="stack-after">MVC &mdash; separated concerns</div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-before">Ad-hoc file access</div>
+        <div class="stack-arrow">&rarr;</div>
+        <div class="stack-after">SQL &mdash; declarative data queries</div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-before">Inline presentation</div>
+        <div class="stack-arrow">&rarr;</div>
+        <div class="stack-after">CSS &mdash; content from layout</div>
+      </div>
+      <div class="stack-row">
+        <div class="stack-before">Direct machine code</div>
+        <div class="stack-arrow">&rarr;</div>
+        <div class="stack-after">IR / AST &mdash; portable programs</div>
+      </div>
+      <div class="stack-row current">
+        <div class="stack-before">Raw natural language</div>
+        <div class="stack-arrow">&rarr;</div>
+        <div class="stack-after">IDD &mdash; structured, composable intent</div>
+      </div>
+    </div>
+    <div class="spacer-lg"></div>
+    <p class="subtitle" style="font-size:15px;">IDD is a grammar for talking to agents the way SQL is a grammar for talking to databases.</p>
+  </div>
+
+  <!-- ==================== SLIDE 4: FIVE PRIMITIVES ==================== -->
+  <div class="slide" data-slide="3">
+    <div class="slide-label">The Five Primitives</div>
+    <h2 class="center-text">Five questions. Orthogonal.</h2>
+    <div class="spacer"></div>
+    <div class="content">
+      <table class="primitives-table">
+        <thead>
+          <tr>
+            <th>Primitive</th>
+            <th>Question</th>
+            <th>Defines</th>
+            <th style="text-align:right;">Key Fields</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="accent">Agent</span></td>
+            <td class="q-col">WHO does this?</td>
+            <td>Identity, capabilities, constraints</td>
+            <td class="mono" style="text-align:right;">name, role, tools</td>
+          </tr>
+          <tr>
+            <td><span class="accent">Context</span></td>
+            <td class="q-col">WHAT do they know?</td>
+            <td>Knowledge, state, references</td>
+            <td class="mono" style="text-align:right;">type, content, scope</td>
+          </tr>
+          <tr>
+            <td><span class="accent">Behavior</span></td>
+            <td class="q-col">HOW should they work?</td>
+            <td>Patterns, protocols, standards</td>
+            <td class="mono" style="text-align:right;">pattern, rules</td>
+          </tr>
+          <tr>
+            <td><span class="accent">Intent</span></td>
+            <td class="q-col">WHY are we doing this?</td>
+            <td>Goal, success criteria, scope</td>
+            <td class="mono" style="text-align:right;">goal, criteria, scope</td>
+          </tr>
+          <tr>
+            <td><span class="accent">Trigger</span></td>
+            <td class="q-col">WHEN does it happen?</td>
+            <td>Conditions, sequences, timing</td>
+            <td class="mono" style="text-align:right;">activation, conditions</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="spacer-lg"></div>
+    <p style="font-size:14px; color:var(--text-muted); text-align:center;">
+      <span style="color:var(--accent-light); font-weight:600;">The Decomposition Test:</span>
+      If a component answers more than one question, decompose further.
+    </p>
+  </div>
+
+  <!-- ==================== SLIDE 5: THREE LAYERS ==================== -->
+  <div class="slide" data-slide="4">
+    <div class="slide-label">Three Layers</div>
+    <h2 class="center-text">Voice &rarr; Grammar &rarr; Machinery</h2>
+    <div class="spacer"></div>
+    <div class="layer-stack">
+      <div class="layer-row">
+        <div class="layer-label">Layer 1</div>
+        <div class="layer-content" style="border-radius:10px 10px 0 0;">
+          <div style="font-weight:600; margin-bottom:4px;">Voice</div>
+          <div style="font-size:13px; color:var(--text-muted);">Natural language. What the user says. No syntax, no schema.</div>
+        </div>
+        <div class="layer-audience">Anyone</div>
+      </div>
+      <div class="layer-row">
+        <div class="layer-label" style="color:var(--accent-light);">Layer 2</div>
+        <div class="layer-content highlight">
+          <div style="font-weight:700; color:var(--accent-light); margin-bottom:4px;">Grammar <span style="font-size:11px; font-weight:500; opacity:0.7; margin-left:8px;">THE PRODUCT</span></div>
+          <div style="font-size:13px; color:var(--text-secondary);">Structured decomposition into 5 primitives. Inspectable. Editable. Composable.</div>
+        </div>
+        <div class="layer-audience" style="color:var(--accent-light);">Human + Machine</div>
+      </div>
+      <div class="layer-row">
+        <div class="layer-label">Layer 3</div>
+        <div class="layer-content" style="border-radius:0 0 10px 10px;">
+          <div style="font-weight:600; margin-bottom:4px;">Machinery</div>
+          <div style="font-size:13px; color:var(--text-muted);">Execution. Agents, tools, workflows. Invisible to the user.</div>
+        </div>
+        <div class="layer-audience">System only</div>
+      </div>
+    </div>
+    <div class="spacer-lg"></div>
+    <p style="font-size:14px; color:var(--text-muted); text-align:center;">
+      Grammar is the lingua franca of multi-agent coordination &mdash; the intermediate representation<br>between what the user said and what the system does.
+    </p>
+  </div>
+
+  <!-- ==================== SLIDE 6: VOICE TO GRAMMAR ==================== -->
+  <div class="slide" data-slide="5">
+    <div class="slide-label">Layer 1 &rarr; Layer 2</div>
+    <h2 class="center-text" style="font-size:clamp(22px,2.8vw,36px);">From voice to grammar.</h2>
+    <div class="spacer"></div>
+    <div class="content" style="max-width:950px;">
+      <div class="voice-block">
+        &ldquo;Our onboarding takes too long. Make it under 2 minutes, keep it mobile-friendly, don&rsquo;t add new dependencies.&rdquo;
+      </div>
+      <div style="text-align:center; padding:16px 0; color:var(--accent-light); font-size:20px;">&darr;</div>
+      <div class="card-accent" style="padding:24px 28px;">
+        <div class="grammar-grid">
+          <div class="grammar-key">Intent</div>
+          <div class="grammar-val">Redesign onboarding for speed. <strong style="color:var(--text);">Criteria:</strong> under 2 min, mobile-first, zero new deps.</div>
+          <div class="grammar-key">Agent</div>
+          <div class="grammar-val" style="font-family:var(--font-mono); font-size:13px;">Explorer &rarr; Researcher &rarr; Architect &rarr; Builder &rarr; Reviewer</div>
+          <div class="grammar-key">Context</div>
+          <div class="grammar-val">Codebase structure <span class="dim">(auto-detected)</span> &bull; Onboarding best practices <span class="dim">(to discover)</span></div>
+          <div class="grammar-key">Behavior</div>
+          <div class="grammar-val">Research before designing. Review before shipping. Preserve existing API surface.</div>
+          <div class="grammar-key">Trigger</div>
+          <div class="grammar-val">On demand. Present plan before executing. Human confirmation on destructive changes.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 7: EXECUTION CONTRACT ==================== -->
+  <div class="slide" data-slide="6">
+    <div class="slide-label">The Execution Contract</div>
+    <h2 class="center-text" style="font-size:clamp(22px,2.8vw,36px);">Decomposition is the <span class="accent">beginning</span>,<br>not the deliverable.</h2>
+    <div class="spacer-sm"></div>
+    <p class="subtitle" style="font-size:15px;">The single most impactful discovery. Without it, IDD was a planning tool that never executed.</p>
+    <div class="spacer"></div>
+    <div class="pipeline">
+      <div class="phase">
+        <div class="phase-num">01</div>
+        <div class="phase-name">Decompose</div>
+        <div class="phase-desc">Parse intent into<br>5 primitives</div>
+        <span class="phase-arrow">&rarr;</span>
+      </div>
+      <div class="phase">
+        <div class="phase-num">02</div>
+        <div class="phase-name">Ground</div>
+        <div class="phase-desc">Resolve every<br>unknown</div>
+        <span class="phase-arrow">&rarr;</span>
+      </div>
+      <div class="phase">
+        <div class="phase-num">03</div>
+        <div class="phase-name">Execute</div>
+        <div class="phase-desc">Delegate to<br>identified agents</div>
+        <span class="phase-arrow">&rarr;</span>
+      </div>
+      <div class="phase">
+        <div class="phase-num">04</div>
+        <div class="phase-name">Verify</div>
+        <div class="phase-desc">Check every<br>success criterion</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div style="display:flex; gap:24px; justify-content:center; font-size:13px;">
+      <span style="color:var(--text-muted);"><span class="amber">Pause if:</span> confidence &lt; 60% &bull; destructive ops &bull; user said &ldquo;plan this&rdquo;</span>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 8: A/B INTRO ==================== -->
+  <div class="slide" data-slide="7">
+    <div class="slide-label">Evaluation</div>
+    <h2 class="center-text">We A/B tested it.</h2>
+    <div class="spacer"></div>
+    <p class="subtitle" style="max-width:600px;">
+      4 controlled experiments. Same prompts, same provider, same codebase.<br>
+      IDD bundle vs. standard Amplifier superpowers.
+    </p>
+    <div class="spacer-lg"></div>
+    <div class="three-col" style="max-width:700px;">
+      <div class="card" style="text-align:center; padding:20px;">
+        <div style="font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">Provider</div>
+        <div style="font-size:15px; font-weight:600;">Claude Sonnet 4</div>
+      </div>
+      <div class="card" style="text-align:center; padding:20px;">
+        <div style="font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">Tests</div>
+        <div style="font-size:15px; font-weight:600;">4 Controlled</div>
+      </div>
+      <div class="card" style="text-align:center; padding:20px;">
+        <div style="font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--text-muted); margin-bottom:8px;">Method</div>
+        <div style="font-size:15px; font-weight:600;">Identical Prompts</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 9: CODE REVIEW ==================== -->
+  <div class="slide" data-slide="8">
+    <div class="slide-label">Test 1 &mdash; Planning</div>
+    <h2 class="center-text" style="font-size:clamp(20px,2.5vw,32px);">&ldquo;Break down a code review workflow.&rdquo;</h2>
+    <div class="spacer"></div>
+    <div class="ab-compare">
+      <div class="ab-side control">
+        <div class="ab-tag control-tag">Standard</div>
+        <div class="ab-metric">
+          <span>Output</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">Prose list</span>
+        </div>
+        <div class="ab-metric">
+          <span>Steps</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">8 prose steps</span>
+        </div>
+        <div class="ab-metric">
+          <span>Success criteria</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">0</span>
+        </div>
+        <div class="ab-metric">
+          <span>Scope boundaries</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">None</span>
+        </div>
+        <div class="ab-metric">
+          <span>Named behaviors</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">0</span>
+        </div>
+      </div>
+      <div class="ab-side treatment">
+        <div class="ab-tag idd-tag">IDD</div>
+        <div class="ab-metric">
+          <span>Output</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">5 agents in pipeline</span>
+        </div>
+        <div class="ab-metric">
+          <span>Success criteria</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">5 measurable</span>
+        </div>
+        <div class="ab-metric">
+          <span>Scope boundaries</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">Explicit in/out</span>
+        </div>
+        <div class="ab-metric">
+          <span>Named behaviors</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">6 behaviors</span>
+        </div>
+        <div class="ab-metric">
+          <span>Confidence</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">88%</span>
+        </div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:88%;"></div></div>
+        <div class="winner-badge idd">&#x2713; IDD wins &mdash; large margin</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 10: API OPTIMIZATION ==================== -->
+  <div class="slide" data-slide="9">
+    <div class="slide-label">Test 2 &mdash; Multi-Phase Planning</div>
+    <h2 class="center-text" style="font-size:clamp(20px,2.5vw,32px);">&ldquo;Optimize API response times under 200ms.&rdquo;</h2>
+    <div class="spacer"></div>
+    <div class="ab-compare">
+      <div class="ab-side control">
+        <div class="ab-tag control-tag">Standard</div>
+        <div class="ab-metric">
+          <span>First response</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">Clarifying Qs</span>
+        </div>
+        <div class="ab-metric">
+          <span>Agents identified</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">&mdash;</span>
+        </div>
+        <div class="ab-metric">
+          <span>Success criteria</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">0</span>
+        </div>
+        <div class="ab-metric">
+          <span>Discovery questions</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">0</span>
+        </div>
+        <div class="ab-metric">
+          <span>Scope definition</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">None</span>
+        </div>
+      </div>
+      <div class="ab-side treatment">
+        <div class="ab-tag idd-tag">IDD</div>
+        <div class="ab-metric">
+          <span>First response</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">Full decomposition</span>
+        </div>
+        <div class="ab-metric">
+          <span>Agents identified</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">8 across 5 phases</span>
+        </div>
+        <div class="ab-metric">
+          <span>Success criteria</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">6 measurable</span>
+        </div>
+        <div class="ab-metric">
+          <span>Discovery questions</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">7 with rationale</span>
+        </div>
+        <div class="ab-metric">
+          <span>Scope definition</span>
+          <span class="ab-metric-value" style="color:var(--accent-light);">Explicit table</span>
+        </div>
+        <div class="confidence-bar"><div class="confidence-fill" style="width:78%;"></div></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="winner-badge idd">&#x2713; IDD wins &mdash; large margin</div>
+          <span style="font-size:12px; color:var(--accent-light); font-family:var(--font-mono);">78% confidence</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 11: BUG HUNTING ==================== -->
+  <div class="slide" data-slide="10">
+    <div class="slide-label">Test 4 &mdash; Focused Execution</div>
+    <h2 class="center-text" style="font-size:clamp(20px,2.5vw,32px);">Parser bug hunting.</h2>
+    <div class="spacer"></div>
+    <div class="ab-compare">
+      <div class="ab-side winner-green">
+        <div class="ab-tag winner-tag">Standard (bug-hunter)</div>
+        <div class="ab-metric">
+          <span>Bugs found</span>
+          <span class="ab-metric-value" style="color:var(--green);">10</span>
+        </div>
+        <div class="ab-metric">
+          <span>Fixes applied</span>
+          <span class="ab-metric-value" style="color:var(--green);">9</span>
+        </div>
+        <div class="ab-metric">
+          <span>Tests passing</span>
+          <span class="ab-metric-value" style="color:var(--green);">216</span>
+        </div>
+        <div class="winner-badge non-idd">&#x2713; Specialist wins</div>
+      </div>
+      <div class="ab-side control" style="border-color:var(--border);">
+        <div class="ab-tag control-tag">IDD</div>
+        <div class="ab-metric">
+          <span>Issues identified</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">8</span>
+        </div>
+        <div class="ab-metric">
+          <span>Fixes applied</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">3</span>
+        </div>
+        <div class="ab-metric">
+          <span>Tests passing</span>
+          <span class="ab-metric-value" style="color:var(--text-muted);">183</span>
+        </div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <p class="subtitle" style="font-size:15px; max-width:650px;">
+      IDD excels at decomposing complex, multi-phase work.<br>
+      For focused, single-domain execution, <strong style="color:var(--text);">specialists are better tools</strong>.
+    </p>
+  </div>
+
+  <!-- ==================== SLIDE 12: THE VERDICT ==================== -->
+  <div class="slide" data-slide="11">
+    <div class="slide-label">The Verdict</div>
+    <h2 class="center-text">Complementary, not competing.</h2>
+    <div class="spacer"></div>
+    <div class="scorecard">
+      <div class="score-item" style="border-color:var(--accent); background:var(--accent-glow);">
+        <div class="score-result" style="color:var(--accent-light);">IDD Wins</div>
+        <div class="score-task">Code Review<br>Planning</div>
+      </div>
+      <div class="score-item" style="border-color:var(--accent); background:var(--accent-glow);">
+        <div class="score-result" style="color:var(--accent-light);">IDD Wins</div>
+        <div class="score-task">API Optimization<br>Multi-Phase</div>
+      </div>
+      <div class="score-item">
+        <div class="score-result" style="color:var(--text-secondary);">Tie</div>
+        <div class="score-task">Knowledge<br>Retrieval</div>
+      </div>
+      <div class="score-item" style="border-color:var(--amber); background:var(--amber-dim);">
+        <div class="score-result" style="color:var(--amber);">Specialist Wins</div>
+        <div class="score-task">Bug Hunting<br>Focused Execution</div>
+      </div>
+    </div>
+    <div class="spacer-lg"></div>
+    <div class="big-quote" style="font-size:clamp(18px,2.2vw,28px);">
+      IDD decomposes the problem. Superpowers execute the solution.
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 13: ARCHITECTURE ==================== -->
+  <div class="slide" data-slide="12">
+    <div class="slide-label">Architecture</div>
+    <h2 class="center-text" style="font-size:clamp(22px,2.8vw,36px);">No custom orchestrator.<br><span class="dim" style="font-size:0.7em;">Power through content, not machinery.</span></h2>
+    <div class="spacer"></div>
+    <div class="arch-grid">
+      <div class="arch-item">
+        <div class="arch-num">2</div>
+        <div class="arch-label">Tools</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">decompose<br>compile</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-num">4</div>
+        <div class="arch-label">Hooks</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">events, grammar<br>reporter, confirm</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-num">3</div>
+        <div class="arch-label">Agents</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">composer<br>reviewer, expert</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-num">8</div>
+        <div class="arch-label">Context Files</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">primitives, rules<br>philosophy, protocols</div>
+      </div>
+      <div class="arch-item">
+        <div class="arch-num">4</div>
+        <div class="arch-label">Recipes</div>
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">decompose, full-cycle<br>audit, teach</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div style="display:flex; gap:40px; justify-content:center; align-items:center; flex-wrap:wrap;">
+      <div style="text-align:center;">
+        <div style="font-size:28px; font-weight:700; color:var(--green);">216</div>
+        <div style="font-size:11px; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase;">Tests Passing</div>
+      </div>
+      <div style="color:var(--border);">|</div>
+      <div style="text-align:center;">
+        <div style="font-size:28px; font-weight:700; color:var(--green);">0.35s</div>
+        <div style="font-size:11px; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase;">Test Suite</div>
+      </div>
+      <div style="color:var(--border);">|</div>
+      <div style="text-align:center;">
+        <div style="font-size:28px; font-weight:700; color:var(--text-secondary);">1,092</div>
+        <div style="font-size:11px; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase;">Lines of Python</div>
+      </div>
+      <div style="color:var(--border);">|</div>
+      <div style="text-align:center;">
+        <div style="font-size:20px; font-weight:700; color:var(--text-secondary); font-family:var(--font-mono);">loop-streaming</div>
+        <div style="font-size:11px; color:var(--text-muted); letter-spacing:1px; text-transform:uppercase;">Standard Orchestrator</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== SLIDE 14: PARADIGM SHIFT ==================== -->
+  <div class="slide" data-slide="13">
+    <div class="slide-label">The Paradigm Shift</div>
+    <h2 class="center-text" style="font-size:clamp(22px,2.8vw,36px);">MVC structured how to build the solution.<br><span class="accent">IDD structures how to express the problem.</span></h2>
+    <div class="spacer"></div>
+    <div class="content" style="max-width:800px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Property</th>
+            <th>MVC</th>
+            <th>IDD</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Organizes</td>
+            <td>Implementation code</td>
+            <td style="color:var(--accent-light);">Problem expression</td>
+          </tr>
+          <tr>
+            <td>Audience</td>
+            <td>Developers building systems</td>
+            <td style="color:var(--accent-light);">Anyone directing agent work</td>
+          </tr>
+          <tr>
+            <td>Artifact</td>
+            <td>Source files in a project</td>
+            <td style="color:var(--accent-light);">A declaration of structured intent</td>
+          </tr>
+          <tr>
+            <td>Composability</td>
+            <td>Limited (frameworks are rigid)</td>
+            <td style="color:var(--accent-light);">Native (orthogonal primitives)</td>
+          </tr>
+          <tr>
+            <td>Verification</td>
+            <td>Tests, type checks</td>
+            <td style="color:var(--accent-light);">Human review of intent before action</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="spacer-xl"></div>
+    <p class="subtitle" style="font-size:15px; max-width:650px;">
+      The problem decomposition <em>is</em> the solution specification.<br>
+      <span style="color:var(--text-muted);">Amplifier says &ldquo;here are Lego bricks.&rdquo; IDD says &ldquo;here is a language for describing what to build with them.&rdquo;</span>
+    </p>
+  </div>
+
+  <!-- ==================== SLIDE 15: CTA ==================== -->
+  <div class="slide" data-slide="14">
+    <div class="slide-label">Get Started</div>
+    <h1 class="center-text" style="font-size:clamp(32px,4vw,52px);">Try IDD.</h1>
+    <div class="spacer"></div>
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-num">5</div>
+        <div class="stat-label">Primitives</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">3</div>
+        <div class="stat-label">Layers</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">4</div>
+        <div class="stat-label">Execution Phases</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">216</div>
+        <div class="stat-label">Tests Passing</div>
+      </div>
+    </div>
+    <div class="spacer-lg"></div>
+    <div style="text-align:center;">
+      <div style="font-family:var(--font-mono); font-size:14px; color:var(--accent-light); background:var(--surface); display:inline-block; padding:12px 24px; border-radius:8px; border:1px solid var(--border);">
+        amplifier-bundle-idd
+      </div>
+    </div>
+    <div class="spacer-lg"></div>
+    <div style="text-align:center; font-size:14px; color:var(--text-muted); line-height:1.8;">
+      <div><span style="color:var(--text-secondary);">Spec:</span> IDD Specification v0.5 &bull; Audit Verdict: <span class="green">PASS</span></div>
+      <div><span style="color:var(--text-secondary);">Composition:</span> 6 rules &bull; 11 anti-patterns cataloged &bull; 27-point review checklist</div>
+      <div style="margin-top:8px; color:var(--text-muted);">Michael J. Jabbour &bull; MADE Explorations &bull; 2026</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ==================== NAVIGATION ==================== -->
+<div class="nav-dots" id="navDots"></div>
+<div class="slide-counter" id="counter"></div>
+<div class="click-prev" id="clickPrev"></div>
+<div class="click-next" id="clickNext"></div>
+
+<script>
+(function() {
+  var slides = document.querySelectorAll('.slide');
+  var navDots = document.getElementById('navDots');
+  var counter = document.getElementById('counter');
+  var total = slides.length;
+  var current = 0;
+  var transitioning = false;
+
+  // Build nav dots
+  for (var i = 0; i < total; i++) {
+    var dot = document.createElement('button');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.setAttribute('data-index', i);
+    dot.addEventListener('click', function() {
+      goTo(parseInt(this.getAttribute('data-index')));
+    });
+    navDots.appendChild(dot);
+  }
+
+  function updateCounter() {
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+
+  function goTo(n) {
+    if (transitioning || n === current || n < 0 || n >= total) return;
+    transitioning = true;
+
+    var direction = n > current ? 1 : -1;
+    var prev = slides[current];
+    var next = slides[n];
+
+    prev.classList.remove('active');
+    prev.classList.add('exiting');
+    prev.style.transform = direction > 0 ? 'translateX(-40px)' : 'translateX(40px)';
+
+    next.style.transform = direction > 0 ? 'translateX(40px)' : 'translateX(-40px)';
+    next.style.opacity = '0';
+    next.classList.remove('exiting');
+
+    void next.offsetWidth;
+
+    next.classList.add('active');
+
+    navDots.children[current].classList.remove('active');
+    navDots.children[n].classList.add('active');
+
+    current = n;
+    updateCounter();
+
+    setTimeout(function() {
+      prev.classList.remove('exiting');
+      prev.style.transform = '';
+      prev.style.opacity = '';
+      transitioning = false;
+    }, 500);
+  }
+
+  function goNext() { goTo(current + 1); }
+  function goPrev() { goTo(current - 1); }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goNext(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+    if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    if (e.key === 'End') { e.preventDefault(); goTo(total - 1); }
+  });
+
+  document.getElementById('clickPrev').addEventListener('click', goPrev);
+  document.getElementById('clickNext').addEventListener('click', goNext);
+
+  var touchStartX = 0;
+  document.addEventListener('touchstart', function(e) { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', function(e) {
+    var diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? goNext() : goPrev(); }
+  });
+
+  updateCounter();
+})();
+</script>
+
+</body>
+</html>
