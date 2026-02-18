@@ -100,6 +100,77 @@ In ALL other cases: decompose → ground → execute → verify. One flow.
 | Stop because confidence is 75% | 75% is good enough to start. Unknowns resolve during execution | Proceed and adapt |
 | Decompose a simple task into 5 agents | IDD is for complex work. Simple tasks get simple execution | Skip decomposition for single-step requests |
 
+## When Superpowers (or Similar Methodology Bundles) Is Present
+
+IDD produces plans. Methodology bundles like Superpowers execute them with
+discipline. When both are composed, **eliminate duplicate phases** — don't
+brainstorm what IDD already decomposed, don't raw-execute what Superpowers
+enforces with TDD.
+
+### The Combined Flow
+
+```
+IDD decomposes  →  IDD grounds  →  Superpowers executes (per task)  →  IDD verifies criteria
+     ↑                                    ↑                                    ↓
+replaces brainstorm          replaces IDD raw execution          combined with SP /verify
+  + write-plan               (TDD + 3-agent review)             then SP /finish
+```
+
+### What Changes When a Methodology Bundle Is Present
+
+| IDD Phase | Without Methodology Bundle | With Methodology Bundle |
+|-----------|---------------------------|------------------------|
+| **Decompose** | Call `idd_decompose`, present summary | Same — this is where IDD adds unique value |
+| **Ground** | Resolve `context.to_discover` items | Same |
+| **Execute** | Delegate to agents with context | Hand each task to the methodology's execution mode (e.g. `/execute-plan`). Each task gets TDD enforcement and multi-agent review for free. |
+| **Verify** | Check success criteria against evidence | Check success criteria (IDD) AND run methodology verification (e.g. `/verify` for fresh test evidence). Both must pass. |
+| **Finish** | Report results | Hand off to methodology finish (e.g. `/finish` for PR creation, worktree cleanup) |
+
+### When IDD Should Step Back
+
+A methodology bundle like Superpowers handles these natively and better.
+Do NOT decompose — go straight to the appropriate mode:
+
+- **Bug hunting / debugging** → `/debug` mode directly
+- **Implementation with clear spec** → `/execute-plan` mode directly
+- **Code review** → three-agent review pipeline directly
+- **Quick well-scoped task (< 30 min)** → appropriate mode directly
+
+### When IDD Should Lead
+
+IDD adds value that methodology bundles don't provide. Use `idd_decompose` when:
+
+- The task is **multi-agent, multi-phase, or ambiguous in scope**
+- Nobody can articulate clear success criteria yet
+- The request involves **coordination** across different concerns
+- You keep restarting because the scope isn't right
+- Multiple stakeholders would disagree on what "done" means
+
+### Mapping IDD Output to Methodology Tasks
+
+When IDD decomposes and a methodology bundle executes, map the decomposition
+directly to methodology tasks:
+
+- Each **agent assignment** in the decomposition becomes a methodology task
+- The **success criteria** become verification assertions
+- The **behaviors** inform which methodology mode or discipline to apply
+- The **scope boundaries** (scope_in / scope_out) become guardrails for each task
+
+This means IDD's decomposition output IS the plan — no separate
+brainstorm-then-plan phase is needed. The decomposition is more structured
+than a brainstorm (typed primitives, measurable criteria, explicit scope)
+and the methodology's execution is more disciplined than raw delegation
+(TDD enforcement, review pipelines, evidence gates).
+
+### What NOT to Do
+
+| Anti-pattern | Why it's wrong | Do this instead |
+|-------------|---------------|-----------------|
+| Decompose with IDD, then brainstorm with methodology | Duplicate planning — wastes tokens and time | IDD decomposition replaces brainstorm + plan |
+| Skip IDD and brainstorm a multi-agent task | Methodology brainstorm produces prose, not typed primitives | Use IDD for multi-agent/ambiguous work |
+| Use IDD's raw execution when methodology enforcement is available | Loses TDD and review guarantees | Hand each task to methodology execution mode |
+| Run both verification passes separately | User sees two verification reports for the same work | Combine: IDD criteria check + methodology evidence check in one report |
+
 ## Mid-Flight Correction
 
 The user can adjust the plan at any time by speaking at the intent level:
