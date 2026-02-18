@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from amplifier_module_orchestrator_idd.grammar import Decomposition
-from amplifier_module_orchestrator_idd.parser import IDDParser
+from amplifier_module_tool_idd.grammar import Decomposition
+from amplifier_module_tool_idd.parser import IDDParser
 
 from helpers import VALID_DECOMPOSITION_JSON, FakeFailingProvider, FakeProvider
 
@@ -316,21 +316,21 @@ class TestParserParseResponseDirect:
 class TestParserSystemPrompt:
     def test_system_prompt_includes_agents(self):
         """The system prompt template should list available agents."""
-        from amplifier_module_orchestrator_idd.parser import _SYSTEM_PROMPT_TEMPLATE
+        from amplifier_module_tool_idd.parser import _SYSTEM_PROMPT_TEMPLATE
 
         agents_str = "explorer, builder, zen-architect"
         rendered = _SYSTEM_PROMPT_TEMPLATE.format(available_agents=agents_str)
         assert "explorer, builder, zen-architect" in rendered
 
     def test_system_prompt_empty_agents(self):
-        from amplifier_module_orchestrator_idd.parser import _SYSTEM_PROMPT_TEMPLATE
+        from amplifier_module_tool_idd.parser import _SYSTEM_PROMPT_TEMPLATE
 
         rendered = _SYSTEM_PROMPT_TEMPLATE.format(available_agents="(none)")
         assert "(none)" in rendered
 
     def test_system_prompt_contains_schema(self):
         """Prompt must include the JSON schema for the five primitives."""
-        from amplifier_module_orchestrator_idd.parser import _SYSTEM_PROMPT_TEMPLATE
+        from amplifier_module_tool_idd.parser import _SYSTEM_PROMPT_TEMPLATE
 
         rendered = _SYSTEM_PROMPT_TEMPLATE.format(available_agents="x")
         assert '"intent"' in rendered

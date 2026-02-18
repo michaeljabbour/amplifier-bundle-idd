@@ -1,6 +1,6 @@
 # IDD-Aware Session
 
-This session uses Intent-Driven Design (IDD). Every interaction is decomposed
+This session uses Intent-Driven Design (IDD). Every interaction can be decomposed
 into five orthogonal primitives before execution:
 
 | Primitive | Question | Purpose |
@@ -11,22 +11,46 @@ into five orthogonal primitives before execution:
 | **Intent** | WHY | Goal, success criteria, definition of done |
 | **Trigger** | WHEN | Conditions, sequences, events, timing |
 
-## How It Works
+## IDD Tools
 
-1. **Layer 1 (Voice):** You express intent in natural language.
-2. **Layer 2 (Grammar):** The system decomposes your input into five primitives
-   and presents a structured plan for confirmation.
-3. **Layer 3 (Machinery):** On approval, agents execute the plan. Progress is
-   reported against your original intent and success criteria, not internal state.
+You have two IDD tools available. Use them when a task benefits from structured decomposition:
+
+- **`idd_decompose`** -- Call with a natural language task to decompose it into five
+  IDD primitives. Returns a structured JSON decomposition with intent, agents,
+  context, behaviors, trigger, success criteria, and confidence score.
+  The Grammar state is registered for hooks to observe.
+
+- **`idd_compile`** -- Call after `idd_decompose` to compile the decomposition into
+  executable Amplifier recipe YAML (schema v1.7.0). Uses the Grammar state from the
+  prior decompose call.
+
+## When to Use IDD Decomposition
+
+Use `idd_decompose` when:
+- A task is complex enough to benefit from structured breakdown
+- The user asks to "break down", "decompose", or "plan" a task
+- Multiple agents or steps are needed
+- Success criteria should be explicit before execution
+
+You do NOT need to decompose simple, single-step requests.
+
+## The Flow
+
+1. **Layer 1 (Voice):** User expresses intent in natural language.
+2. **You call `idd_decompose`** with the user's input.
+3. **Present the plan** to the user. A 15-second confirmation window opens
+   automatically -- the user can adjust direction or let it auto-proceed.
+4. **Execute** by delegating to agents or running the compiled recipe.
+5. **Report completion** against the original intent and success criteria.
 
 ## Mid-Flight Correction
 
-You can adjust the plan at any time by speaking at the intent level:
+The user can adjust the plan at any time by speaking at the intent level:
 - "Skip mobile for now" (adjusts scope)
 - "Add a review step" (adjusts behavior)
 - "Use the explorer instead" (adjusts agent)
 
-The system updates the Grammar and resumes without restarting.
+Call `idd_decompose` again with the updated direction to refresh the Grammar state.
 
 ## IDD Expert Agents
 

@@ -104,11 +104,12 @@ class FakeContextManager:
 class FakeCoordinator:
     """Fake coordinator with capabilities and config."""
 
-    def __init__(self, config: dict | None = None):
+    def __init__(self, config: dict | None = None, providers: dict | None = None):
         self._capabilities: dict = {}
         self._mounted: dict = {}
         self.config = config or {"agents": {}}
         self.hooks = FakeHookRegistry()
+        self._providers = providers or {}
 
     def register_capability(self, name: str, value):
         self._capabilities[name] = value
@@ -123,6 +124,12 @@ class FakeCoordinator:
             self._mounted[mount_point][name] = module
         else:
             self._mounted[mount_point] = module
+
+    def get(self, key: str):
+        """Return registry values by key (e.g. 'providers')."""
+        if key == "providers":
+            return self._providers
+        return None
 
     @property
     def session(self):

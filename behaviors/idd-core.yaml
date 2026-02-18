@@ -1,14 +1,12 @@
 bundle:
   name: idd-core-behavior
-  version: 0.2.0
-  description: IDD Layer 2 machinery - orchestrator, hooks, agents, and knowledge
+  version: 0.3.0
+  description: IDD capability - tools, hooks, agents, and knowledge (no custom orchestrator)
 
-session:
-  orchestrator:
-    module: orchestrator-idd
-    source: ../modules/orchestrator-idd
-    config:
-      inner_orchestrator: loop-streaming
+tools:
+  - module: tool-idd
+    source: ../modules/tool-idd
+    config: {}
 
 hooks:
   - module: hooks-idd-events

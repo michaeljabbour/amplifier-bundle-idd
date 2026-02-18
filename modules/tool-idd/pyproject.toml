@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-module-tool-idd"
+version = "0.1.0"
+description = "IDD tools - decompose natural language into five primitives and compile to recipe YAML"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.entry-points."amplifier.modules"]
+tool-idd = "amplifier_module_tool_idd:mount"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_tool_idd"]

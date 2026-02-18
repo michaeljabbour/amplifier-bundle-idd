@@ -1,6 +1,6 @@
 {
   "extraPaths": [
-    "modules/orchestrator-idd",
+    "modules/tool-idd",
     "modules/hooks-idd-events",
     "modules/hooks-idd-grammar-inject",
     "modules/hooks-idd-reporter",

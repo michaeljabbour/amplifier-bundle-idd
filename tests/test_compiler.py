@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import yaml
 
-from amplifier_module_orchestrator_idd.compiler import IDDCompiler
-from amplifier_module_orchestrator_idd.grammar import (
+from amplifier_module_tool_idd.compiler import IDDCompiler
+from amplifier_module_tool_idd.grammar import (
     AgentAssignment,
     BehaviorReference,
     ContextRequirement,

@@ -9,7 +9,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = [
     "tests",
-    "modules/orchestrator-idd",
+    "modules/tool-idd",
     "modules/hooks-idd-events",
     "modules/hooks-idd-grammar-inject",
     "modules/hooks-idd-reporter",

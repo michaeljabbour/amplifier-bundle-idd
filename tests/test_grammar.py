@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from amplifier_module_orchestrator_idd.grammar import (
+from amplifier_module_tool_idd.grammar import (
     AgentAssignment,
     BehaviorReference,
     ContextRequirement,
