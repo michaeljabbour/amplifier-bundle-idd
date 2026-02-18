@@ -13,7 +13,6 @@ build/
 ~$*
 *.tmp
 
-# IDD spec documents (binary, not for version control)
-amplifier-idd-spec.docx
+# IDD spec working copies (keep the canonical spec tracked)
 amplifier-idd-spec2.docx
 amplifier-idd-spec3.docx
