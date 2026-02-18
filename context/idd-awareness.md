@@ -32,7 +32,17 @@ Use `idd_decompose` when:
 - Multiple agents or steps are needed
 - Success criteria should be explicit before execution
 
-You do NOT need to decompose simple, single-step requests.
+Do NOT decompose when the task is **focused technical execution**, even if it
+touches many files. These tasks benefit from immediate expert action, not
+structured planning:
+- Bug hunting / debugging (delegate straight to bug-hunter)
+- Code review / quality checks (delegate straight to reviewer agents)
+- Single-concept edits (rename, refactor, fix one issue across files)
+- Targeted investigation ("why does X happen?")
+
+IDD decomposition wins on **planning and orchestration** — multi-step work
+where the *what to do* is unclear. It loses on tasks where the goal is already
+sharp and a specialist agent can just execute.
 
 ## The Execution Contract
 

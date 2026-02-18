@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from typing import Any
 
@@ -83,6 +84,8 @@ Rules:
 """
 
 _DEFAULT_TEMPERATURE = 0.3
+
+_VALID_CONFIRMATIONS = frozenset({"auto", "human", "none"})
 
 
 # ---------------------------------------------------------------------------
@@ -174,16 +177,36 @@ class IDDParser:
             logger.warning("IDDParser: failed to parse JSON from LLM response")
             return self._fallback_decomposition(original_prompt, reason="malformed JSON from LLM")
 
+        if not isinstance(data, dict):
+            logger.warning("IDDParser: JSON is not an object (got %s)", type(data).__name__)
+            return self._fallback_decomposition(original_prompt, reason="JSON is not an object")
+
         return self._dict_to_decomposition(data, original_prompt)
 
     @staticmethod
     def _extract_json(text: str) -> str:
-        """Strip optional markdown fences and leading/trailing whitespace."""
+        """Strip optional markdown fences and leading/trailing whitespace.
+
+        Handles:
+        - Any language hint (``json``, ``JSON``, ``jsonl``, etc.)
+        - Multiple fences (takes the last one, most likely the complete output)
+        - Unclosed fences (streaming truncation)
+        - Text before/after unfenced JSON (LLM preamble/postamble)
+        """
         text = text.strip()
-        # Remove ```json ... ``` wrappers
-        fence_match = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
-        if fence_match:
-            return fence_match.group(1).strip()
+        # Try fenced blocks — take the last match (most likely to be complete)
+        fence_matches = list(re.finditer(r"```\w*\s*\n?(.*?)```", text, re.DOTALL))
+        if fence_matches:
+            return fence_matches[-1].group(1).strip()
+        # Handle unclosed fence (e.g. streaming truncation)
+        unclosed_match = re.match(r"```\w*\s*\n?", text)
+        if unclosed_match:
+            return text[unclosed_match.end() :].strip()
+        # No fences — try to find JSON object boundaries
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            return text[start : end + 1]
         return text
 
     def _dict_to_decomposition(self, data: dict, raw_input: str) -> Decomposition:
@@ -191,7 +214,10 @@ class IDDParser:
 
         Missing or malformed keys fall back to sensible defaults.
         """
+        raw_input = raw_input or ""
         intent_d = data.get("intent", {})
+        if not isinstance(intent_d, dict):
+            intent_d = {}
         intent = IntentPrimitive(
             goal=intent_d.get("goal", raw_input[:200]),
             success_criteria=_as_str_list(intent_d.get("success_criteria")),
@@ -201,10 +227,19 @@ class IDDParser:
         )
 
         trigger_d = data.get("trigger", {})
+        if not isinstance(trigger_d, dict):
+            trigger_d = {}
+        raw_confirmation = trigger_d.get("confirmation", "auto")
+        if raw_confirmation not in _VALID_CONFIRMATIONS:
+            logger.warning(
+                "IDDParser: invalid confirmation value %r, defaulting to 'human'",
+                raw_confirmation,
+            )
+            raw_confirmation = "human"
         trigger = TriggerPrimitive(
             activation=trigger_d.get("activation", "user request"),
             pre_conditions=_as_str_list(trigger_d.get("pre_conditions")),
-            confirmation=trigger_d.get("confirmation", "auto"),
+            confirmation=raw_confirmation,
         )
 
         agents = [
@@ -227,6 +262,8 @@ class IDDParser:
             ]
 
         ctx_d = data.get("context", {})
+        if not isinstance(ctx_d, dict):
+            ctx_d = {}
         context = ContextRequirement(
             auto_detected=_as_str_list(ctx_d.get("auto_detected")),
             provided=_as_str_list(ctx_d.get("provided")),
@@ -242,7 +279,10 @@ class IDDParser:
         confidence = data.get("confidence", 0.0)
         if not isinstance(confidence, (int, float)):
             confidence = 0.0
-        confidence = max(0.0, min(1.0, float(confidence)))
+        confidence = float(confidence)
+        if not math.isfinite(confidence):
+            confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
 
         return Decomposition(
             intent=intent,
@@ -263,6 +303,8 @@ class IDDParser:
         This guarantees the orchestrator always has *something* to work
         with, even if the LLM call errors out.
         """
+        prompt = prompt or ""
+        logger.warning("IDDParser: returning fallback decomposition (%s)", reason)
         return Decomposition(
             intent=IntentPrimitive(
                 goal=prompt[:200],
@@ -296,11 +338,19 @@ class IDDParser:
 
 
 def _as_str_list(value: Any) -> list[str]:
-    """Coerce *value* to a list of strings, tolerating ``None`` and scalars."""
+    """Coerce *value* to a flat list of strings, tolerating ``None``, scalars, and nested lists."""
     if value is None:
         return []
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):
-        return [str(v) for v in value if v is not None]
+        result: list[str] = []
+        for v in value:
+            if v is None:
+                continue
+            if isinstance(v, list):
+                result.extend(str(item) for item in v if item is not None)
+            else:
+                result.append(str(v))
+        return result
     return []
