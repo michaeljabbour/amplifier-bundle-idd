@@ -171,6 +171,113 @@ and the methodology's execution is more disciplined than raw delegation
 | Use IDD's raw execution when methodology enforcement is available | Loses TDD and review guarantees | Hand each task to methodology execution mode |
 | Run both verification passes separately | User sees two verification reports for the same work | Combine: IDD criteria check + methodology evidence check in one report |
 
+## Amplifier Mechanisms
+
+IDD's strength is its content (five primitives, orthogonality, composition rules).
+But content alone relies on the LLM following instructions. Amplifier provides
+**enforcement mechanisms** that make the workflow physically reliable, not just
+suggested. Use them.
+
+### Modes — Enforce Phases with Tool Policy
+
+IDD provides two modes that restrict tool access during planning phases:
+
+| Mode | Activates | Tools Blocked | Purpose |
+|------|-----------|---------------|---------|
+| `/decompose` | Before any execution | write_file, edit_file, apply_patch | Forces structured thinking — you cannot write code until the decomposition is done |
+| `/ground` | After decompose, before execute | write_file, edit_file, apply_patch | Forces discovery — you cannot implement until all unknowns are resolved |
+
+**How to use them:**
+
+- **Suggest `/decompose`** when a user brings a complex, multi-agent, or
+  ambiguous task. The mode physically prevents premature implementation.
+- **Transition to `/ground`** if the decomposition has `context.to_discover`
+  items. The mode allows full investigation (bash, read, delegate) but blocks
+  code writing.
+- **Transition to execution** when grounding is complete. If Superpowers is
+  present, suggest `/execute-plan`. Otherwise, clear the mode and execute.
+
+Mode transitions are explicit — you suggest them, the user activates them,
+or you use `mode(operation="set", name="decompose")` programmatically.
+
+### Delegate — Context-Aware Agent Handoffs
+
+During IDD execution, use the `delegate` tool to dispatch agents identified
+in the decomposition. Amplifier's delegate is more powerful than raw task
+dispatch — it shares context between agents.
+
+**Pattern: Sequential agent chain with accumulated knowledge**
+
+Each agent in the decomposition sees the prior agent's output:
+
+```
+delegate(agent="foundation:explorer", instruction="Survey the auth module",
+         context_depth="none")
+
+delegate(agent="foundation:zen-architect",
+         instruction="Design caching layer based on survey findings",
+         context_scope="agents")  # <-- sees explorer's output
+
+delegate(agent="foundation:modular-builder",
+         instruction="Implement per the architect's design",
+         context_scope="agents")  # <-- sees both prior agents
+```
+
+**Pattern: Parallel dispatch for grounding**
+
+Resolve multiple discovery items simultaneously:
+
+```
+delegate(agent="foundation:explorer",
+         instruction="What database is used?", context_depth="none")
+delegate(agent="python-dev:code-intel",
+         instruction="Trace the request flow", context_depth="none")
+delegate(agent="foundation:web-research",
+         instruction="Look up Redis caching best practices", context_depth="none")
+```
+
+**Pattern: Session resumption for iterative refinement**
+
+Resume an agent session to refine its work without re-doing exploration:
+
+```
+result = delegate(agent="idd:idd-composer", instruction="Decompose this task")
+# ... user provides feedback ...
+delegate(session_id=result.session_id, instruction="Adjust scope per feedback")
+```
+
+### Recipes — Repeatable Multi-Step Workflows
+
+IDD provides recipes for common workflows. Use them when the pattern is
+well-defined and should be repeatable:
+
+| Recipe | When to Use |
+|--------|------------|
+| `idd-decompose` | Decompose + validate with reviewer audit and approval gate |
+| `idd-full-cycle` | Complete pipeline: decompose, audit, approve, execute, verify |
+| `idd-audit` | Audit existing artifacts for IDD compliance |
+| `idd-teach` | Interactive IDD onboarding |
+
+**Compile custom recipes from decompositions:** After `idd_decompose`,
+call `idd_compile` to generate a recipe YAML for the specific task.
+This recipe can then be executed via the `recipes` tool, giving you
+checkpointing, resumability, and approval gates for free.
+
+### Hooks — Automatic Grammar Awareness
+
+IDD hooks run automatically — you don't need to invoke them:
+
+| Hook | Priority | What It Does |
+|------|----------|-------------|
+| Grammar injection | 3 | Injects current Grammar state into every LLM prompt (ephemeral) |
+| Confirmation gate | 7 | 15-second approval window after decomposition (default-allow) |
+| Event recorder | 10 | Records all `idd:*` events to in-memory log |
+| Reporter | 15 | Renders human-readable progress messages |
+
+The Grammar injection hook means the LLM always knows the current
+decomposition state, success criteria progress, and corrections — without
+you needing to re-state them.
+
 ## Mid-Flight Correction
 
 The user can adjust the plan at any time by speaking at the intent level:
