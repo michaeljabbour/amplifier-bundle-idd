@@ -137,6 +137,20 @@ class IDDDecomposeTool:
         except Exception:
             logger.debug("Could not emit idd:intent_parsed", exc_info=True)
 
+        # Emit idd:composition_ready — triggers the confirmation gate
+        # (15s timeout, default-allow) and the reporter plan display.
+        try:
+            plan = _build_plan_summary(decomposition)
+            await self._coordinator.hooks.emit(
+                "idd:composition_ready",
+                {
+                    "plan": plan,
+                    "decomposition": decomposition.to_dict(),
+                },
+            )
+        except Exception:
+            logger.debug("Could not emit idd:composition_ready", exc_info=True)
+
         return _tool_result(
             True,
             json.dumps(decomposition.to_dict(), indent=2),
@@ -250,6 +264,42 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_plan_summary(decomposition: Any) -> str:
+    """Build a concise human-readable plan from a Decomposition.
+
+    This is the text the confirmation gate shows the user during the
+    15-second approval window.  Keep it short — the user is scanning,
+    not studying.
+    """
+    parts: list[str] = []
+
+    # Goal
+    parts.append(f"Goal: {decomposition.intent.goal}")
+
+    # Agents
+    if decomposition.agents:
+        agent_lines = [f"  - {a.name} ({a.role})" for a in decomposition.agents]
+        parts.append("Agents:\n" + "\n".join(agent_lines))
+
+    # Success criteria
+    if decomposition.intent.success_criteria:
+        criteria_lines = [f"  - {c}" for c in decomposition.intent.success_criteria]
+        parts.append("Success criteria:\n" + "\n".join(criteria_lines))
+
+    # Scope boundaries (only if non-empty)
+    if decomposition.intent.scope_out:
+        parts.append(f"Out of scope: {', '.join(decomposition.intent.scope_out)}")
+
+    # Confirmation mode
+    if decomposition.trigger.confirmation == "human":
+        parts.append("Confirmation: human approval required")
+
+    # Confidence
+    parts.append(f"Confidence: {decomposition.confidence:.0%}")
+
+    return "\n".join(parts)
 
 
 def _tool_result(success: bool, output: str) -> Any:
