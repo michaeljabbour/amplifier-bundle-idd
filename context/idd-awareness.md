@@ -287,6 +287,30 @@ The user can adjust the plan at any time by speaking at the intent level:
 
 Call `idd_decompose` again with the updated direction to refresh the Grammar state.
 
+## IDD Skills (Loadable Knowledge)
+
+IDD provides 6 skills — reference knowledge loaded on demand instead of
+always consuming context budget. Register the IDD skills source on first use:
+
+```
+load_skill(source="@idd:skills")
+```
+
+Then load any skill when you need its knowledge:
+
+| Skill | When to Load |
+|-------|-------------|
+| `idd-five-primitives` | Composing primitives, checking boundary rules, resolving conflation |
+| `idd-philosophy` | Explaining IDD, justifying decomposition, teaching the approach |
+| `idd-composition-rules` | Composing primitives into plans, validating composition correctness |
+| `idd-decomposition-test` | Validating decomposition quality (3-step gate) after decomposing |
+| `idd-recipe-compilation` | Compiling decompositions to recipe YAML, understanding the mapping |
+| `idd-review` | Auditing compositions, reviewing against checklists, diagnosing anti-patterns |
+
+Skills use progressive disclosure: you see the name and description (~100 tokens)
+automatically. Full content loads only when you call `load_skill(skill_name="...")`.
+Two skills have companion reference files accessible via `read_file(skill_directory + "/references/...")`.
+
 ## IDD Expert Agents
 
 For deep IDD work, delegate to specialist agents:
