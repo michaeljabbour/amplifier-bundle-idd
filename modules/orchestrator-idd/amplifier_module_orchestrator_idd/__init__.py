@@ -116,9 +116,18 @@ class IDDOrchestrator:
             },
         )
 
-        # 5. Present plan to user (Layer 2→1) ---------------------------------
+        # 5. Present plan and open timed confirmation gate ---------------------
+        #
+        # The ``idd:composition_ready`` event is intercepted by the
+        # ``hooks-idd-confirmation`` module which opens a NON-BLOCKING
+        # timed window (default 15 s, configurable).  Three outcomes:
+        #
+        #   * Timeout / no reply -> ``action="continue"`` (default-allow)
+        #   * User provides direction -> ``action="modify"`` with correction
+        #   * User says "pause"/"stop" -> ``action="deny"``
+        #
         plan_summary = self._grammar_state.summary()
-        await _emit_safe(
+        gate_result = await _emit_safe(
             hooks,
             "idd:composition_ready",
             {
@@ -127,18 +136,10 @@ class IDDOrchestrator:
             },
         )
 
-        # 6. If human confirmation required, request it ------------------------
-        if decomposition.trigger.confirmation == "human":
-            gate_result = await _emit_safe(
-                hooks,
-                "prompt:submit",
-                {
-                    "prompt": (f"[IDD Plan]\n{plan_summary}\n\nProceed? (yes/no/adjust)"),
-                },
-            )
-            if _is_denied(gate_result):
-                self._grammar_state.status = "cancelled"
-                return "[IDD] Execution cancelled by user."
+        # 6. Process confirmation gate outcome ---------------------------------
+        gate_result = await self._process_confirmation(gate_result, hooks, decomposition)
+        if gate_result == "cancelled":
+            return "[IDD] Execution paused by user. Provide new direction when ready."
 
         # 7. Compile to executable recipe --------------------------------------
         recipe = self._compiler.compile(decomposition)
@@ -184,6 +185,82 @@ class IDDOrchestrator:
 
         # 11. Return human-readable summary (str per protocol) -----------------
         return self._build_completion_summary(results)
+
+    # -- Confirmation gate ----------------------------------------------------
+
+    async def _process_confirmation(
+        self,
+        gate_result: Any,
+        hooks: Any,
+        decomposition: Any,
+    ) -> str:
+        """Process the Layer 2 confirmation gate outcome.
+
+        The ``idd:composition_ready`` event is handled by the
+        ``hooks-idd-confirmation`` module which opens a timed,
+        non-blocking window (default 15 s).  This method interprets
+        the hook result:
+
+        * ``action="continue"`` (or timeout) -- proceed as planned.
+        * ``action="modify"`` with ``data.user_correction`` -- apply
+          the correction to Grammar state and re-parse if needed.
+        * ``action="deny"`` -- user said "pause"; halt execution.
+
+        Returns
+        -------
+        str
+            ``"ok"`` to proceed, ``"cancelled"`` to halt.
+        """
+        if gate_result is None:
+            return "ok"
+
+        action = getattr(gate_result, "action", "continue")
+
+        if action == "deny":
+            self._grammar_state.status = "cancelled"
+            return "cancelled"
+
+        if action == "modify":
+            data = getattr(gate_result, "data", None) or {}
+            correction_text = data.get("user_correction", "")
+            if correction_text:
+                await self._apply_user_correction(correction_text, hooks, decomposition)
+
+        return "ok"
+
+    async def _apply_user_correction(
+        self,
+        correction_text: str,
+        hooks: Any,
+        decomposition: Any,
+    ) -> None:
+        """Apply a user's mid-flight correction to the Grammar state.
+
+        Records the correction and emits ``idd:correction`` so that
+        telemetry and the reporter can track the change.
+        """
+        from datetime import datetime, timezone
+        from .grammar import CorrectionRecord
+
+        record = CorrectionRecord(
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            primitive="user-directed",
+            old_value="(original plan)",
+            new_value=correction_text[:500],
+            reason=f"User correction at Layer 2 confirmation: {correction_text[:200]}",
+        )
+        self._grammar_state.corrections.append(record)
+
+        await _emit_safe(
+            hooks,
+            "idd:correction",
+            {
+                "primitive": record.primitive,
+                "old_value": record.old_value,
+                "new_value": record.new_value,
+                "reason": record.reason,
+            },
+        )
 
     # -- Step execution -------------------------------------------------------
 

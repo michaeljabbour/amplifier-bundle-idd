@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-module-hooks-idd-confirmation"
+version = "0.1.0"
+description = "IDD Layer 2 confirmation gate - timed non-blocking user approval with default-continue"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.entry-points."amplifier.modules"]
+hooks-idd-confirmation = "amplifier_module_hooks_idd_confirmation:mount"
+
+[tool.hatch.build.targets.wheel]
+packages = ["amplifier_module_hooks_idd_confirmation"]

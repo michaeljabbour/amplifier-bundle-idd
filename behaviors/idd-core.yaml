@@ -25,6 +25,13 @@ hooks:
     config:
       priority: 15
 
+  - module: hooks-idd-confirmation
+    source: ../modules/hooks-idd-confirmation
+    config:
+      timeout: 15
+      enabled: true
+      show_plan: true
+
 agents:
   include:
     - idd:agents/idd-composer
