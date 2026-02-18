@@ -27,6 +27,13 @@ from .compiler import IDDCompiler
 from .grammar import GrammarState, SuccessCriterionStatus
 from .parser import IDDParser
 
+# Conditional import — ToolResult comes from amplifier-core,
+# but we guard the import so the module can be tested in isolation.
+try:
+    from amplifier_core.models import ToolResult  # pyright: ignore[reportAttributeAccessIssue]
+except ImportError:  # pragma: no cover
+    ToolResult = None  # type: ignore[assignment,misc]
+
 logger = logging.getLogger(__name__)
 
 __amplifier_module_type__ = "tool"
@@ -78,7 +85,7 @@ class IDDDecomposeTool:
             "required": ["input"],
         }
 
-    async def execute(self, input: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, input: dict[str, Any]) -> Any:
         """Execute the decomposition."""
         raw_input = input.get("input", "")
         if not raw_input:
@@ -182,7 +189,7 @@ class IDDCompileTool:
             "required": [],
         }
 
-    async def execute(self, input: dict[str, Any]) -> dict[str, Any]:
+    async def execute(self, input: dict[str, Any]) -> Any:
         """Execute the compilation."""
         # Try to get decomposition from input or Grammar state
         decomposition = None
@@ -245,9 +252,15 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _tool_result(success: bool, output: str) -> dict[str, Any]:
-    """Build a tool result dict compatible with Amplifier's ToolResult."""
-    return {
-        "success": success,
-        "output": output,
-    }
+def _tool_result(success: bool, output: str) -> Any:
+    """Build a ToolResult compatible with Amplifier's tool infrastructure.
+
+    Returns a proper ``ToolResult`` when amplifier-core is available,
+    falling back to a plain dict for isolated testing.
+    """
+    if ToolResult is not None:
+        if success:
+            return ToolResult(success=True, output=output)
+        return ToolResult(success=False, output=output, error={"message": output})
+    # Fallback for tests running without amplifier-core
+    return {"success": success, "output": output}

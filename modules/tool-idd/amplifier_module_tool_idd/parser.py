@@ -21,13 +21,13 @@ from .grammar import (
     TriggerPrimitive,
 )
 
-# Conditional import — ChatRequest/ChatMessage come from amplifier-core,
+# Conditional import — ChatRequest/Message come from amplifier-core,
 # but we guard the import so the module can be tested in isolation.
 try:
-    from amplifier_core.models import ChatMessage, ChatRequest  # pyright: ignore[reportAttributeAccessIssue]
+    from amplifier_core.message_models import ChatRequest, Message  # pyright: ignore[reportAttributeAccessIssue]
 except ImportError:  # pragma: no cover
     ChatRequest = None  # type: ignore[assignment,misc]
-    ChatMessage = None  # type: ignore[assignment,misc]
+    Message = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -141,17 +141,16 @@ class IDDParser:
         available_agents: list[str],
     ) -> Any:
         """Build a :class:`ChatRequest` for the decomposition LLM call."""
-        if ChatRequest is None or ChatMessage is None:
+        if ChatRequest is None or Message is None:
             raise RuntimeError("amplifier_core is not installed — cannot build ChatRequest")
 
         agents_str = ", ".join(available_agents) if available_agents else "(none)"
         system_prompt = _SYSTEM_PROMPT_TEMPLATE.format(available_agents=agents_str)
 
         return ChatRequest(
-            model="",  # use provider's default model
             messages=[
-                ChatMessage(role="system", content=system_prompt),
-                ChatMessage(role="user", content=prompt),
+                Message(role="system", content=system_prompt),
+                Message(role="user", content=prompt),
             ],
             temperature=_DEFAULT_TEMPERATURE,
         )

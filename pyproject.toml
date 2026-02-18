@@ -1,8 +1,15 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "amplifier-bundle-idd"
 version = "0.1.0"
 description = "Intent-Driven Design bundle for Amplifier"
 requires-python = ">=3.11"
+
+[tool.setuptools]
+packages = []
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -99,13 +99,12 @@ class TestDecomposeToolProperties:
 class TestDecomposeToolExecute:
     @pytest.mark.asyncio
     @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
-    async def test_returns_dict_with_success_and_output(self):
+    async def test_returns_result_with_success_and_output(self):
         coord = _coordinator_with_provider()
         tool = IDDDecomposeTool(coord)
         result = await tool.execute({"input": "Add caching"})
-        assert isinstance(result, dict)
-        assert "success" in result
-        assert "output" in result
+        assert hasattr(result, "success")
+        assert hasattr(result, "output")
 
     @pytest.mark.asyncio
     @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
@@ -113,9 +112,9 @@ class TestDecomposeToolExecute:
         coord = _coordinator_with_provider()
         tool = IDDDecomposeTool(coord)
         result = await tool.execute({"input": "Add caching"})
-        assert result["success"] is True
+        assert result.success is True
         # Output should be valid JSON containing the decomposition
-        parsed = json.loads(result["output"])
+        parsed = json.loads(result.output)
         assert "intent" in parsed
         assert parsed["intent"]["goal"] == "Add caching to the API layer"
 
@@ -124,16 +123,16 @@ class TestDecomposeToolExecute:
         coord = _coordinator_with_provider()
         tool = IDDDecomposeTool(coord)
         result = await tool.execute({"input": ""})
-        assert result["success"] is False
-        assert "No input" in result["output"]
+        assert result.success is False
+        assert "No input" in result.output
 
     @pytest.mark.asyncio
     async def test_missing_input_key_returns_error(self):
         coord = _coordinator_with_provider()
         tool = IDDDecomposeTool(coord)
         result = await tool.execute({})
-        assert result["success"] is False
-        assert "No input" in result["output"]
+        assert result.success is False
+        assert "No input" in result.output
 
     @pytest.mark.asyncio
     @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
@@ -172,8 +171,8 @@ class TestCompileToolExecute:
         coord = FakeCoordinator()
         tool = IDDCompileTool(coord)
         result = await tool.execute({})
-        assert result["success"] is False
-        assert "No decomposition" in result["output"]
+        assert result.success is False
+        assert "No decomposition" in result.output
 
     @pytest.mark.asyncio
     @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
@@ -187,7 +186,7 @@ class TestCompileToolExecute:
         # Then compile
         compile_tool = IDDCompileTool(coord)
         result = await compile_tool.execute({})
-        assert result["success"] is True
-        assert isinstance(result["output"], str)
+        assert result.success is True
+        assert isinstance(result.output, str)
         # Should be valid YAML containing recipe keys
-        assert "name:" in result["output"] or "steps:" in result["output"]
+        assert "name:" in result.output or "steps:" in result.output
