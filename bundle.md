@@ -6,6 +6,7 @@ bundle:
 
 includes:
   - bundle: git+https://github.com/microsoft/amplifier-foundation@main
+  - bundle: git+https://github.com/microsoft/amplifier-bundle-modes@main
   - bundle: idd:behaviors/idd-core
 ---
 

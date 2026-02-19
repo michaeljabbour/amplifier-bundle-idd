@@ -510,3 +510,207 @@ class TestIDDReporterResolved:
         msg = result.user_message
         assert "Response < 200ms" in msg
         assert "Hit ratio > 80%" in msg
+
+
+# ===================================================================
+# IDDConfirmationGate — correction pipeline (P0-1)
+# ===================================================================
+
+
+class TestIDDConfirmationGateConstructor:
+    def test_constructor_accepts_coordinator_and_config(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        coord = FakeCoordinator()
+        gate = IDDConfirmationGate(coord, {"timeout": 30, "enabled": True})
+        assert gate._timeout == 30.0
+        assert gate._enabled is True
+        assert gate._coordinator is coord
+
+    def test_constructor_defaults(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        coord = FakeCoordinator()
+        gate = IDDConfirmationGate(coord, {})
+        assert gate._timeout == 15.0
+        assert gate._enabled is True
+        assert gate._show_plan is True
+
+
+class TestIDDConfirmationGateMount:
+    @pytest.mark.asyncio
+    async def test_mount_registers_two_handlers(self):
+        from amplifier_module_hooks_idd_confirmation import mount
+
+        coord = FakeCoordinator()
+        await mount(coord, {"timeout": 10})
+        assert "idd:composition_ready" in coord.hooks._handlers
+        assert "idd:confirmation_response" in coord.hooks._handlers
+        assert len(coord.hooks._handlers["idd:composition_ready"]) == 1
+        assert len(coord.hooks._handlers["idd:confirmation_response"]) == 1
+
+    @pytest.mark.asyncio
+    async def test_cleanup_unregisters(self):
+        from amplifier_module_hooks_idd_confirmation import mount
+
+        coord = FakeCoordinator()
+        cleanup = await mount(coord)
+        cleanup()
+        assert len(coord.hooks._handlers.get("idd:composition_ready", [])) == 0
+        assert len(coord.hooks._handlers.get("idd:confirmation_response", [])) == 0
+
+
+class TestIDDConfirmationGateResponse:
+    @pytest.mark.asyncio
+    async def test_timeout_returns_continue(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        gate = IDDConfirmationGate(FakeCoordinator(), {})
+        result = await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": None, "timed_out": True},
+        )
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_empty_response_returns_continue(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        gate = IDDConfirmationGate(FakeCoordinator(), {})
+        result = await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "", "timed_out": False},
+        )
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_pause_returns_deny(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        gate = IDDConfirmationGate(FakeCoordinator(), {})
+        result = await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "pause", "timed_out": False},
+        )
+        assert result.action == "deny"
+
+    @pytest.mark.asyncio
+    async def test_continue_returns_continue(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        gate = IDDConfirmationGate(FakeCoordinator(), {})
+        result = await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "yes", "timed_out": False},
+        )
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_correction_returns_modify(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        gate = IDDConfirmationGate(FakeCoordinator(), {})
+        result = await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "Focus on Redis only", "timed_out": False},
+        )
+        assert result.action == "modify"
+        assert result.data["user_correction"] == "Focus on Redis only"
+
+    @pytest.mark.asyncio
+    async def test_correction_writes_correction_record_to_grammar_state(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        coord = FakeCoordinator()
+        gs = _grammar_state_with_decomposition()
+        coord.register_capability("idd.grammar_state", gs)
+
+        gate = IDDConfirmationGate(coord, {})
+        await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "Focus on Redis only", "timed_out": False},
+        )
+
+        assert len(gs.corrections) == 1
+        rec = gs.corrections[0]
+        assert rec.primitive == "intent"
+        assert rec.old_value == "Add caching"
+        assert rec.new_value == "Focus on Redis only"
+        assert "Layer 2" in rec.reason
+
+    @pytest.mark.asyncio
+    async def test_correction_emits_idd_correction_event(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        coord = FakeCoordinator()
+        gs = _grammar_state_with_decomposition()
+        coord.register_capability("idd.grammar_state", gs)
+
+        gate = IDDConfirmationGate(coord, {})
+        await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "Focus on Redis only", "timed_out": False},
+        )
+
+        emitted = [e for e in coord.hooks._emitted if e["event"] == "idd:correction"]
+        assert len(emitted) == 1
+        assert emitted[0]["data"]["primitive"] == "intent"
+        assert "Focus on Redis only" in emitted[0]["data"]["reason"]
+
+    @pytest.mark.asyncio
+    async def test_correction_without_grammar_state_still_returns_modify(self):
+        """Even if there's no grammar state, the modify action still works."""
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        coord = FakeCoordinator()
+        # No grammar state registered
+
+        gate = IDDConfirmationGate(coord, {})
+        result = await gate.handle_confirmation_response(
+            "idd:confirmation_response",
+            {"response": "Change direction", "timed_out": False},
+        )
+        assert result.action == "modify"
+
+    @pytest.mark.asyncio
+    async def test_disabled_gate_returns_continue(self):
+        from amplifier_module_hooks_idd_confirmation import IDDConfirmationGate
+
+        gate = IDDConfirmationGate(FakeCoordinator(), {"enabled": False})
+        result = await gate.handle_composition_ready(
+            "idd:composition_ready",
+            {"plan": "some plan"},
+        )
+        assert result.action == "continue"
+
+
+# ===================================================================
+# IDDEventRecorder — priority fix (P2-2)
+# ===================================================================
+
+
+class TestIDDEventRecorderPriority:
+    @pytest.mark.asyncio
+    async def test_composition_ready_registered_at_priority_5(self):
+        from amplifier_module_hooks_idd_events import mount
+
+        coord = FakeCoordinator()
+        await mount(coord)
+
+        handlers = coord.hooks._handlers.get("idd:composition_ready", [])
+        assert len(handlers) == 1
+        assert handlers[0]["priority"] == 5
+
+    @pytest.mark.asyncio
+    async def test_other_events_remain_at_priority_10(self):
+        from amplifier_module_hooks_idd_events import mount, _IDD_EVENTS
+
+        coord = FakeCoordinator()
+        await mount(coord)
+
+        for event in _IDD_EVENTS:
+            if event == "idd:composition_ready":
+                continue
+            handlers = coord.hooks._handlers.get(event, [])
+            assert len(handlers) == 1
+            assert handlers[0]["priority"] == 10, f"{event} should be priority 10"

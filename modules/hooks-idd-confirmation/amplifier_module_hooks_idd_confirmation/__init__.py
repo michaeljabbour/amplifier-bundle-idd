@@ -76,7 +76,8 @@ class IDDConfirmationGate:
 
     _PAUSE_WORDS = frozenset({"pause", "stop", "wait", "hold"})
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, coordinator: Any, config: dict[str, Any]) -> None:
+        self._coordinator = coordinator
         self._timeout: float = float(config.get("timeout", 15))
         self._enabled: bool = bool(config.get("enabled", True))
         self._show_plan: bool = bool(config.get("show_plan", True))
@@ -152,6 +153,44 @@ class IDDConfirmationGate:
             return _CONTINUE
 
         # Anything else is a correction / redirect
+
+        # Write CorrectionRecord to GrammarState
+        try:
+            from datetime import datetime, timezone
+
+            grammar_state = self._coordinator.get_capability("idd.grammar_state")
+            if grammar_state is not None:
+                from amplifier_module_tool_idd.grammar import CorrectionRecord
+
+                old_goal = "(unknown)"
+                decomp = getattr(grammar_state, "decomposition", None)
+                if decomp is not None:
+                    intent = getattr(decomp, "intent", None)
+                    if intent is not None:
+                        old_goal = getattr(intent, "goal", "(unknown)")
+                record = CorrectionRecord(
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    primitive="intent",
+                    old_value=old_goal,
+                    new_value=response[:500],
+                    reason="User direction at Layer 2 confirmation",
+                )
+                grammar_state.corrections.append(record)
+        except Exception:
+            pass  # Corrections are observability, never crash the pipeline
+
+        # Emit idd:correction event
+        try:
+            await self._coordinator.hooks.emit(
+                "idd:correction",
+                {
+                    "primitive": "intent",
+                    "reason": response[:200],
+                },
+            )
+        except Exception:
+            pass
+
         return HookResult(
             action="modify",
             data={"user_correction": response},
@@ -180,7 +219,7 @@ async def mount(
        user's reply and returns continue / modify / deny.
     """
     config = config or {}
-    gate = IDDConfirmationGate(config)
+    gate = IDDConfirmationGate(coordinator, config)
 
     unreg_ready = coordinator.hooks.register(
         "idd:composition_ready",

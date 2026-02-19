@@ -381,3 +381,294 @@ class TestBuildPlanSummary:
         )
         plan = _build_plan_summary(d)
         assert "Out of scope" not in plan
+
+
+# ===================================================================
+# steps_total set after decompose (P0-3)
+# ===================================================================
+
+
+class TestStepsTotal:
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_steps_total_equals_agent_count(self):
+        coord = _coordinator_with_provider()
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})
+
+        gs = coord.get_capability("idd.grammar_state")
+        assert gs is not None
+        # VALID_DECOMPOSITION_JSON has 3 agents
+        assert gs.steps_total == 3
+
+
+# ===================================================================
+# Callable capabilities registered via mount() (P1-2, P1-3, P2-1)
+# ===================================================================
+
+
+class TestCapabilitiesRegistered:
+    @pytest.mark.asyncio
+    async def test_mount_registers_decompose_capability(self):
+        coord = FakeCoordinator()
+        await mount(coord)
+        cap = coord.get_capability("idd.decompose")
+        assert cap is not None
+        assert callable(cap)
+
+    @pytest.mark.asyncio
+    async def test_mount_registers_compile_capability(self):
+        coord = FakeCoordinator()
+        await mount(coord)
+        cap = coord.get_capability("idd.compile")
+        assert cap is not None
+        assert callable(cap)
+
+    @pytest.mark.asyncio
+    async def test_mount_registers_update_criterion_capability(self):
+        coord = FakeCoordinator()
+        await mount(coord)
+        cap = coord.get_capability("idd.update_criterion")
+        assert cap is not None
+        assert callable(cap)
+
+    @pytest.mark.asyncio
+    async def test_mount_registers_resolve_intent_capability(self):
+        coord = FakeCoordinator()
+        await mount(coord)
+        cap = coord.get_capability("idd.resolve_intent")
+        assert cap is not None
+        assert callable(cap)
+
+
+class TestUpdateCriterionCapability:
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_update_criterion_marks_pass(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)  # registers capabilities
+
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})  # registers grammar_state
+
+        update_fn = coord.get_capability("idd.update_criterion")
+        assert update_fn is not None
+        update_fn("Response time < 200ms", True, "Measured 150ms")
+
+        gs = coord.get_capability("idd.grammar_state")
+        assert gs is not None
+        criterion = next(c for c in gs.criteria_status if c.name == "Response time < 200ms")
+        assert criterion.passed is True
+        assert criterion.evidence == "Measured 150ms"
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_update_criterion_marks_fail(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})
+
+        update_fn = coord.get_capability("idd.update_criterion")
+        assert update_fn is not None
+        update_fn("Cache hit ratio > 80%", False, "Only 60%")
+
+        gs = coord.get_capability("idd.grammar_state")
+        assert gs is not None
+        criterion = next(c for c in gs.criteria_status if c.name == "Cache hit ratio > 80%")
+        assert criterion.passed is False
+        assert criterion.evidence == "Only 60%"
+
+    @pytest.mark.asyncio
+    async def test_update_criterion_noop_when_no_grammar_state(self):
+        """Should not crash if no grammar state is registered."""
+        coord = FakeCoordinator()
+        await mount(coord)
+        update_fn = coord.get_capability("idd.update_criterion")
+        assert update_fn is not None
+        # Should not raise — just silently return
+        update_fn("nonexistent", True, "")
+
+
+class TestResolveIntentCapability:
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_resolve_intent_emits_event(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})
+
+        resolve_fn = coord.get_capability("idd.resolve_intent")
+        assert resolve_fn is not None
+        await resolve_fn("completed", "All done")
+
+        resolved_events = [e for e in coord.hooks._emitted if e["event"] == "idd:intent_resolved"]
+        assert len(resolved_events) == 1
+        data = resolved_events[0]["data"]
+        assert data["status"] == "completed"
+        assert data["summary"] == "All done"
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_resolve_intent_uses_goal_as_default_summary(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})
+
+        resolve_fn = coord.get_capability("idd.resolve_intent")
+        assert resolve_fn is not None
+        await resolve_fn("completed")
+
+        resolved_events = [e for e in coord.hooks._emitted if e["event"] == "idd:intent_resolved"]
+        assert resolved_events[0]["data"]["summary"] == "Add caching to the API layer"
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_resolve_intent_includes_criteria(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})
+
+        # Mark one criterion
+        update_fn = coord.get_capability("idd.update_criterion")
+        assert update_fn is not None
+        update_fn("Response time < 200ms", True, "150ms measured")
+
+        resolve_fn = coord.get_capability("idd.resolve_intent")
+        assert resolve_fn is not None
+        await resolve_fn("completed")
+
+        resolved_events = [e for e in coord.hooks._emitted if e["event"] == "idd:intent_resolved"]
+        criteria = resolved_events[0]["data"]["success_criteria"]
+        assert len(criteria) == 2
+        assert criteria[0]["name"] == "Response time < 200ms"
+        assert criteria[0]["pass"] is True
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_resolve_intent_sets_grammar_status(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+        tool = IDDDecomposeTool(coord)
+        await tool.execute({"input": "Add caching"})
+
+        resolve_fn = coord.get_capability("idd.resolve_intent")
+        assert resolve_fn is not None
+        await resolve_fn("failed", "Timed out")
+
+        gs = coord.get_capability("idd.grammar_state")
+        assert gs is not None
+        assert gs.status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_resolve_intent_noop_when_no_grammar_state(self):
+        """Should not crash if no grammar state is registered."""
+        coord = FakeCoordinator()
+        await mount(coord)
+        resolve_fn = coord.get_capability("idd.resolve_intent")
+        assert resolve_fn is not None
+        # Should not raise
+        await resolve_fn("completed", "no-op")
+
+
+# ===================================================================
+# Progress tracking hook (P0-3)
+# ===================================================================
+
+
+class TestProgressTracking:
+    @pytest.mark.asyncio
+    async def test_tool_post_hook_registered(self):
+        coord = FakeCoordinator()
+        await mount(coord)
+        handlers = coord.hooks._handlers.get("tool:post", [])
+        assert len(handlers) == 1
+        assert handlers[0]["name"] == "idd-progress-tracker"
+        assert handlers[0]["priority"] == 20
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_progress_emitted_on_tool_post(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+
+        # First decompose to create grammar state
+        decompose_tool = IDDDecomposeTool(coord)
+        await decompose_tool.execute({"input": "Add caching"})
+
+        # Clear emitted events so we only see the progress event
+        coord.hooks._emitted.clear()
+
+        # Simulate a tool:post event
+        await coord.hooks.emit("tool:post", {"tool_name": "read_file"})
+
+        progress_events = [e for e in coord.hooks._emitted if e["event"] == "idd:progress"]
+        assert len(progress_events) == 1
+        assert progress_events[0]["data"]["step"] == "read_file"
+        assert progress_events[0]["data"]["completed"] == 1
+        assert progress_events[0]["data"]["total"] == 3
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_idd_tools_not_counted_as_progress(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+
+        decompose_tool = IDDDecomposeTool(coord)
+        await decompose_tool.execute({"input": "Add caching"})
+
+        coord.hooks._emitted.clear()
+
+        # Simulate idd_ tool post — should NOT emit progress
+        await coord.hooks.emit("tool:post", {"tool_name": "idd_compile"})
+
+        progress_events = [e for e in coord.hooks._emitted if e["event"] == "idd:progress"]
+        assert len(progress_events) == 0
+
+    @pytest.mark.asyncio
+    async def test_no_progress_without_grammar_state(self):
+        coord = FakeCoordinator()
+        await mount(coord)
+
+        coord.hooks._emitted.clear()
+        await coord.hooks.emit("tool:post", {"tool_name": "read_file"})
+
+        progress_events = [e for e in coord.hooks._emitted if e["event"] == "idd:progress"]
+        assert len(progress_events) == 0
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_progress_increments_steps_completed(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+
+        decompose_tool = IDDDecomposeTool(coord)
+        await decompose_tool.execute({"input": "Add caching"})
+
+        gs = coord.get_capability("idd.grammar_state")
+        assert gs.steps_completed == 0
+
+        await coord.hooks.emit("tool:post", {"tool_name": "read_file"})
+        assert gs.steps_completed == 1
+
+        await coord.hooks.emit("tool:post", {"tool_name": "write_file"})
+        assert gs.steps_completed == 2
+
+    @pytest.mark.asyncio
+    @patch.object(IDDParser, "_build_chat_request", _patched_build_request)
+    async def test_progress_sets_status_to_executing(self):
+        coord = _coordinator_with_provider()
+        await mount(coord)
+
+        decompose_tool = IDDDecomposeTool(coord)
+        await decompose_tool.execute({"input": "Add caching"})
+
+        gs = coord.get_capability("idd.grammar_state")
+        assert gs.status == "decomposed"
+
+        await coord.hooks.emit("tool:post", {"tool_name": "read_file"})
+        assert gs.status == "executing"

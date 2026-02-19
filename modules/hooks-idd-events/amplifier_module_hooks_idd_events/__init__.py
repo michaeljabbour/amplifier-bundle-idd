@@ -109,10 +109,14 @@ async def mount(
 
     unregister_fns: list[Callable[[], None]] = []
     for event in _IDD_EVENTS:
+        # Register composition_ready at priority 5 (before confirmation gate
+        # at 7) so the recorder sees the event even if ask_user blocks
+        # further handlers.
+        event_priority = 5 if event == "idd:composition_ready" else 10
         unreg = coordinator.hooks.register(
             event,
             recorder.handle_event,
-            priority=10,
+            priority=event_priority,
             name=f"idd-events-{event}",
         )
         unregister_fns.append(unreg)

@@ -30,9 +30,10 @@ from .parser import IDDParser
 # Conditional import — ToolResult comes from amplifier-core,
 # but we guard the import so the module can be tested in isolation.
 try:
-    from amplifier_core.models import ToolResult  # pyright: ignore[reportAttributeAccessIssue]
+    from amplifier_core.models import ToolResult, HookResult  # pyright: ignore[reportAttributeAccessIssue]
 except ImportError:  # pragma: no cover
     ToolResult = None  # type: ignore[assignment,misc]
+    HookResult = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,7 @@ class IDDDecomposeTool:
             SuccessCriterionStatus(name=c) for c in decomposition.intent.success_criteria
         ]
         self._grammar_state.status = "decomposed"
+        self._grammar_state.steps_total = len(decomposition.agents)
 
         # Register as capability so hooks can see it
         try:
@@ -250,8 +252,8 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
     """Amplifier module entry point.
 
     Registers ``idd_decompose`` and ``idd_compile`` as tools on the
-    coordinator.  No orchestrator replacement -- works with the standard
-    ``loop-streaming`` orchestrator.
+    coordinator.  Also registers callable capabilities for programmatic
+    access and a ``tool:post`` hook for progress tracking.
     """
     config = config or {}
     decompose_tool = IDDDecomposeTool(coordinator)
@@ -259,6 +261,116 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
 
     await coordinator.mount("tools", decompose_tool, name=decompose_tool.name)
     await coordinator.mount("tools", compile_tool, name=compile_tool.name)
+
+    # -----------------------------------------------------------------
+    # Callable capabilities (P1-2, P1-3)
+    # -----------------------------------------------------------------
+
+    async def _decompose_capability(input_text: str) -> Any:
+        return await decompose_tool.execute({"input": input_text})
+
+    async def _compile_capability(decomposition_json: str = "") -> Any:
+        return await compile_tool.execute({"decomposition_json": decomposition_json})
+
+    def _update_criterion(name: str, passed: bool, evidence: str = "") -> None:
+        gs = coordinator.get_capability("idd.grammar_state")
+        if gs is None:
+            return
+        for cs in gs.criteria_status:
+            if cs.name == name:
+                cs.passed = passed
+                cs.evidence = evidence
+                return
+
+    try:
+        coordinator.register_capability("idd.decompose", _decompose_capability)
+        coordinator.register_capability("idd.compile", _compile_capability)
+        coordinator.register_capability("idd.update_criterion", _update_criterion)
+    except Exception:
+        logger.debug("Could not register IDD capabilities", exc_info=True)
+
+    # -----------------------------------------------------------------
+    # Intent resolution capability (P2-1)
+    # -----------------------------------------------------------------
+
+    async def _resolve_intent(status: str = "completed", summary: str = "") -> None:
+        gs = coordinator.get_capability("idd.grammar_state")
+        if gs is None:
+            return
+        gs.status = status
+        criteria_data: list[dict[str, Any]] = []
+        for cs in getattr(gs, "criteria_status", []):
+            criteria_data.append(
+                {
+                    "name": cs.name,
+                    "pass": cs.passed,
+                    "evidence": getattr(cs, "evidence", ""),
+                }
+            )
+        try:
+            await coordinator.hooks.emit(
+                "idd:intent_resolved",
+                {
+                    "status": status,
+                    "summary": summary
+                    or (gs.decomposition.intent.goal if gs.decomposition else ""),
+                    "success_criteria": criteria_data,
+                },
+            )
+        except Exception:
+            logger.debug("Could not emit idd:intent_resolved", exc_info=True)
+
+    try:
+        coordinator.register_capability("idd.resolve_intent", _resolve_intent)
+    except Exception:
+        logger.debug("Could not register idd.resolve_intent capability", exc_info=True)
+
+    # -----------------------------------------------------------------
+    # Progress tracking — emit idd:progress on tool completions (P0-3)
+    # -----------------------------------------------------------------
+
+    async def _handle_tool_post(event: str, data: dict[str, Any]) -> Any:
+        try:
+            gs = coordinator.get_capability("idd.grammar_state")
+            if gs is None or gs.status not in ("decomposed", "executing"):
+                if HookResult is not None:
+                    return HookResult(action="continue")
+                return {"action": "continue"}
+
+            tool_name = data.get("tool_name", "")
+            # Don't count IDD's own tools as progress steps
+            if tool_name.startswith("idd_"):
+                if HookResult is not None:
+                    return HookResult(action="continue")
+                return {"action": "continue"}
+
+            gs.status = "executing"
+            gs.steps_completed += 1
+
+            await coordinator.hooks.emit(
+                "idd:progress",
+                {
+                    "step": tool_name,
+                    "completed": gs.steps_completed,
+                    "total": gs.steps_total,
+                },
+            )
+        except Exception:
+            logger.debug("Could not emit idd:progress", exc_info=True)
+
+        if HookResult is not None:
+            return HookResult(action="continue")
+        return {"action": "continue"}
+
+    try:
+        coordinator.hooks.register(
+            "tool:post",
+            _handle_tool_post,
+            priority=20,
+            name="idd-progress-tracker",
+        )
+    except Exception:
+        logger.debug("Could not register idd-progress-tracker", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

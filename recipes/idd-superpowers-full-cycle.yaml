@@ -1,0 +1,80 @@
+name: idd-superpowers-full-cycle
+description: >
+  Full lifecycle combining IDD decomposition with Superpowers TDD execution.
+  IDD owns planning and verification. Superpowers owns implementation.
+
+stages:
+  - name: design
+    description: IDD decomposes and validates the task
+    steps:
+      - name: decompose
+        agent: idd:idd-composer
+        instruction: >
+          Decompose the following task into IDD primitives. Produce a structured
+          decomposition with all five primitives, measurable success criteria,
+          and confidence score.
+
+          Task: {{input}}
+
+      - name: review
+        agent: idd:idd-reviewer
+        depends_on: [decompose]
+        instruction: >
+          Audit this IDD decomposition for completeness and orthogonality.
+          Check all five primitives, verify success criteria are measurable,
+          and confirm scope boundaries are explicit.
+
+          Decomposition: {{steps.decompose.result}}
+
+      - name: refine
+        agent: idd:idd-composer
+        depends_on: [review]
+        instruction: >
+          Review the audit findings and refine the decomposition if needed.
+          If the audit passed, confirm the composition is ready.
+          If issues were found, fix them and produce the updated decomposition.
+
+          Original decomposition: {{steps.decompose.result}}
+          Audit findings: {{steps.review.result}}
+
+    approval:
+      required: true
+      prompt: |
+        The IDD design stage is complete. Review the decomposition and audit results above.
+        Approve to proceed with Superpowers TDD execution, or deny to revise the design.
+
+  - name: execute
+    description: Superpowers executes each task with TDD discipline
+    steps:
+      - name: implement
+        agent: self
+        instruction: >
+          Execute the approved IDD decomposition using Superpowers methodology.
+          For each agent assignment in the decomposition, enter /execute-plan mode
+          and implement with TDD discipline (test first, then code, then review).
+
+          Use the three-agent pipeline: implementer writes code with tests,
+          spec-reviewer verifies against the IDD success criteria,
+          code-quality-reviewer checks for maintainability.
+
+          Approved plan: {{steps.refine.result}}
+
+      - name: verify
+        agent: self
+        depends_on: [implement]
+        instruction: >
+          Verify the implementation against the IDD success criteria.
+          For each success criterion from the decomposition:
+          - Run the relevant test or check
+          - Record PASS, FAIL, or UNABLE TO VERIFY with evidence
+
+          Also run Superpowers /verify mode for fresh test evidence.
+
+          Success criteria from plan: {{steps.refine.result}}
+          Implementation results: {{steps.implement.result}}
+
+    approval:
+      required: true
+      prompt: |
+        Implementation and verification are complete. Review the results above.
+        Approve to finish (merge/PR), or deny to iterate on the implementation.

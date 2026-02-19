@@ -20,6 +20,7 @@ pythonpath = [
     "modules/hooks-idd-events",
     "modules/hooks-idd-grammar-inject",
     "modules/hooks-idd-reporter",
+    "modules/hooks-idd-confirmation",
 ]
 
 [tool.ruff]
