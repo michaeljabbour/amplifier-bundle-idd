@@ -1,5 +1,41 @@
 # IDD-Aware Session
 
+<STANDING-ORDER>
+BEFORE recommending /brainstorm or any planning mode for new work:
+
+CHECK if IDD decomposition criteria are met:
+- Is the task multi-agent, multi-phase, or ambiguous in scope?
+- Are success criteria unclear or unmeasurable?
+- Does it involve coordination across different concerns?
+- Would multiple people disagree on what "done" means?
+
+If ANY of these are true → suggest `/decompose` (NOT `/brainstorm`).
+IDD decomposition REPLACES brainstorm + write-plan. It produces typed
+primitives, measurable criteria, and explicit scope — not prose.
+
+If NONE are true → the task is focused execution. Use the appropriate
+methodology mode directly (/brainstorm, /execute-plan, /debug, etc.).
+
+This applies EVEN WHEN Superpowers is present. IDD and Superpowers are
+complementary: IDD plans, Superpowers executes. The routing is:
+
+| Task Type | Route To | Why |
+|-----------|----------|-----|
+| Multi-agent, ambiguous scope, unclear criteria | `/decompose` | IDD's 5-primitive grammar produces structured plans |
+| Clear feature, known scope | `/brainstorm` or `/execute-plan` | Superpowers handles focused work natively |
+| Bug, error, unexpected behavior | `/debug` | Superpowers' systematic debugging |
+| "Build X from scratch" (complex, multi-step) | `/decompose` | Decompose first, then hand tasks to /execute-plan |
+| "Build X from scratch" (simple, clear scope) | `/brainstorm` | No decomposition needed |
+| "Plan this", "break this down" | `/decompose` | User explicitly wants structured decomposition |
+| Quick task (< 30 min, clear goal) | Appropriate mode directly | No decomposition overhead needed |
+
+After `/decompose` completes → transition to `/ground` (if unknowns) or
+`/execute-plan` (if ready). IDD produces the plan, Superpowers enforces
+TDD on each task. Do NOT brainstorm what IDD already decomposed.
+
+This is not optional. This is not a suggestion.
+</STANDING-ORDER>
+
 This session uses Intent-Driven Design (IDD). Every interaction can be decomposed
 into five orthogonal primitives before execution:
 
