@@ -1,0 +1,100 @@
+name: idd-informed-full-cycle
+description: >
+  Full lifecycle with memory-informed planning, IDD decomposition,
+  Superpowers TDD execution, and memory persistence.
+  Each stage operates independently — missing capabilities are skipped gracefully.
+
+stages:
+  - name: design
+    description: IDD decomposes the task, informed by prior session memories
+    steps:
+      - name: recall
+        agent: self
+        instruction: >
+          Before decomposing, search for relevant memories from prior sessions
+          that might inform this task. Use the memory tool to search for
+          related past work, decisions, and learnings.
+
+          If the memory tool is not available, skip this step and proceed.
+
+          Task: {{input}}
+
+      - name: decompose
+        agent: idd:idd-composer
+        depends_on: [recall]
+        instruction: >
+          Decompose the following task into IDD primitives. Produce a structured
+          decomposition with all five primitives, measurable success criteria,
+          and confidence score.
+
+          Prior context (if any): {{steps.recall.result}}
+
+          Task: {{input}}
+
+      - name: review
+        agent: idd:idd-reviewer
+        depends_on: [decompose]
+        instruction: >
+          Audit this IDD decomposition for completeness and orthogonality.
+          Check all five primitives, verify success criteria are measurable,
+          and confirm scope boundaries are explicit.
+
+          Decomposition: {{steps.decompose.result}}
+
+      - name: refine
+        agent: idd:idd-composer
+        depends_on: [review]
+        instruction: >
+          Review the audit findings and refine the decomposition if needed.
+          If the audit passed, confirm the composition is ready.
+          If issues were found, fix them and produce the updated decomposition.
+
+          Original decomposition: {{steps.decompose.result}}
+          Audit findings: {{steps.review.result}}
+
+    approval:
+      required: true
+      prompt: |
+        The design stage is complete. Review the decomposition and audit above.
+        Approve to proceed with execution, or deny to revise.
+
+  - name: execute
+    description: Execute each task with available methodology enforcement
+    steps:
+      - name: implement
+        agent: self
+        instruction: >
+          Execute the approved decomposition. For each agent assignment:
+
+          If Superpowers modes are available:
+          - Enter /execute-plan mode for TDD-enforced implementation
+          - Use the three-agent pipeline (implementer, spec-reviewer, code-quality-reviewer)
+
+          If Superpowers is not available:
+          - Delegate to the agents specified in the decomposition
+          - Feed each agent's output to the next via context_scope="agents"
+
+          Approved plan: {{steps.refine.result}}
+
+      - name: verify
+        agent: self
+        depends_on: [implement]
+        instruction: >
+          Verify the implementation against success criteria from the decomposition.
+
+          For each success criterion:
+          - Run the relevant test or check
+          - Record PASS, FAIL, or UNABLE TO VERIFY with evidence
+
+          If Superpowers /verify mode is available, use it for fresh test evidence.
+          If the idd.update_criterion capability is available, update each criterion.
+          If the idd.resolve_intent capability is available, call it with the final status.
+
+          Success criteria: {{steps.refine.result}}
+          Implementation: {{steps.implement.result}}
+
+    approval:
+      required: true
+      prompt: |
+        Execution and verification complete. Review the results.
+        Approve to finish, or deny to iterate.

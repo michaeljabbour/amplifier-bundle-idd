@@ -15,7 +15,12 @@ from amplifier_module_tool_idd.grammar import (
     ContextRequirement,
 )
 
-from helpers import FakeCoordinator
+from helpers import FakeCoordinator, FakeMemoryStore
+
+from amplifier_module_hooks_idd_memory_bridge import (
+    mount as memory_bridge_mount,
+    IDDMemoryBridge,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -714,3 +719,224 @@ class TestIDDEventRecorderPriority:
             handlers = coord.hooks._handlers.get(event, [])
             assert len(handlers) == 1
             assert handlers[0]["priority"] == 10, f"{event} should be priority 10"
+
+
+# ===================================================================
+# IDDMemoryBridge (hooks-idd-memory-bridge)
+# ===================================================================
+
+
+class TestIDDMemoryBridgeMount:
+    """Memory bridge hook registration."""
+
+    @pytest.mark.asyncio
+    async def test_mount_registers_two_handlers(self):
+        coord = FakeCoordinator()
+        cleanup = await memory_bridge_mount(coord, {})
+        handlers = coord.hooks._handlers
+        assert "idd:intent_resolved" in handlers
+        assert "idd:correction" in handlers
+        cleanup()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_unregisters(self):
+        coord = FakeCoordinator()
+        cleanup = await memory_bridge_mount(coord, {})
+        cleanup()
+        assert len(coord.hooks._handlers.get("idd:intent_resolved", [])) == 0
+        assert len(coord.hooks._handlers.get("idd:correction", [])) == 0
+
+    @pytest.mark.asyncio
+    async def test_mount_at_priority_12(self):
+        coord = FakeCoordinator()
+        await memory_bridge_mount(coord, {})
+        for event in ("idd:intent_resolved", "idd:correction"):
+            handlers = coord.hooks._handlers.get(event, [])
+            assert len(handlers) == 1
+            assert handlers[0]["priority"] == 12
+
+
+class TestIDDMemoryBridgeIntentResolved:
+    """Memory bridge stores resolved intents."""
+
+    @pytest.mark.asyncio
+    async def test_stores_memory_when_memory_store_available(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_intent_resolved(
+            "idd:intent_resolved",
+            {
+                "status": "completed",
+                "summary": "Built caching layer",
+                "success_criteria": [{"name": "p95 < 200ms", "pass": True}],
+            },
+        )
+        assert len(store._stored) == 1
+        assert "caching layer" in store._stored[0]["content"].lower()
+
+    @pytest.mark.asyncio
+    async def test_noop_when_no_memory_store(self):
+        coord = FakeCoordinator()
+        bridge = IDDMemoryBridge(coord, {})
+        # Should not raise
+        result = await bridge.handle_intent_resolved(
+            "idd:intent_resolved",
+            {
+                "status": "completed",
+                "summary": "test",
+            },
+        )
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_noop_when_disabled(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {"enabled": False})
+        await bridge.handle_intent_resolved(
+            "idd:intent_resolved", {"status": "completed", "summary": "test"}
+        )
+        assert len(store._stored) == 0
+
+    @pytest.mark.asyncio
+    async def test_includes_criteria_in_content(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_intent_resolved(
+            "idd:intent_resolved",
+            {
+                "status": "completed",
+                "summary": "test",
+                "success_criteria": [
+                    {"name": "Tests pass", "pass": True, "evidence": "42 passed"},
+                    {"name": "Coverage > 80%", "pass": False},
+                ],
+            },
+        )
+        content = store._stored[0]["content"]
+        assert "PASS" in content
+        assert "FAIL" in content
+        assert "Tests pass" in content
+
+    @pytest.mark.asyncio
+    async def test_tags_include_status(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_intent_resolved(
+            "idd:intent_resolved",
+            {
+                "status": "completed",
+                "summary": "test",
+            },
+        )
+        assert "completed" in store._stored[0]["tags"]
+        assert "idd" in store._stored[0]["tags"]
+        assert "intent-resolved" in store._stored[0]["tags"]
+
+    @pytest.mark.asyncio
+    async def test_importance_higher_for_completed(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_intent_resolved(
+            "idd:intent_resolved", {"status": "completed", "summary": "test"}
+        )
+        assert store._stored[0]["importance"] == 0.8
+
+    @pytest.mark.asyncio
+    async def test_importance_lower_for_non_completed(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_intent_resolved(
+            "idd:intent_resolved", {"status": "failed", "summary": "test"}
+        )
+        assert store._stored[0]["importance"] == 0.6
+
+
+class TestIDDMemoryBridgeCorrection:
+    """Memory bridge stores corrections."""
+
+    @pytest.mark.asyncio
+    async def test_stores_correction_memory(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_correction(
+            "idd:correction",
+            {
+                "primitive": "intent",
+                "reason": "Skip mobile for now",
+            },
+        )
+        assert len(store._stored) == 1
+        assert "correction" in store._stored[0]["tags"]
+        assert "Skip mobile" in store._stored[0]["content"]
+
+    @pytest.mark.asyncio
+    async def test_skips_empty_reason(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_correction(
+            "idd:correction",
+            {
+                "primitive": "intent",
+                "reason": "",
+            },
+        )
+        assert len(store._stored) == 0
+
+    @pytest.mark.asyncio
+    async def test_correction_tags_include_primitive(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {})
+        await bridge.handle_correction(
+            "idd:correction",
+            {
+                "primitive": "trigger",
+                "reason": "Change to manual approval",
+            },
+        )
+        assert "trigger" in store._stored[0]["tags"]
+
+    @pytest.mark.asyncio
+    async def test_correction_noop_when_no_memory_store(self):
+        coord = FakeCoordinator()
+        bridge = IDDMemoryBridge(coord, {})
+        result = await bridge.handle_correction(
+            "idd:correction",
+            {
+                "primitive": "intent",
+                "reason": "test",
+            },
+        )
+        assert result.action == "continue"
+
+    @pytest.mark.asyncio
+    async def test_correction_noop_when_disabled(self):
+        store = FakeMemoryStore()
+        coord = FakeCoordinator()
+        coord.register_capability("memory.store", store)
+        bridge = IDDMemoryBridge(coord, {"enabled": False})
+        await bridge.handle_correction(
+            "idd:correction",
+            {
+                "primitive": "intent",
+                "reason": "test",
+            },
+        )
+        assert len(store._stored) == 0

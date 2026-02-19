@@ -30,6 +30,11 @@ hooks:
       enabled: true
       show_plan: true
 
+  - module: hooks-idd-memory-bridge
+    source: ../modules/hooks-idd-memory-bridge
+    config:
+      enabled: true
+
 agents:
   include:
     - idd:agents/idd-composer

@@ -10,6 +10,7 @@ mode:
       - glob
       - grep
       - bash
+      - sandbox
       - LSP
       - web_search
       - web_fetch

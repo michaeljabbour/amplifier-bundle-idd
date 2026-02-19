@@ -136,6 +136,20 @@ class FakeCoordinator:
         return None
 
 
+class FakeMemoryStore:
+    """Fake memory store that records store() calls.
+
+    Mimics the interface of LetsGo's memory.store capability so
+    the memory bridge hook can be tested without LetsGo installed.
+    """
+
+    def __init__(self):
+        self._stored: list[dict] = []
+
+    async def store(self, **kwargs):
+        self._stored.append(kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Canonical LLM-style JSON for a valid decomposition
 # ---------------------------------------------------------------------------

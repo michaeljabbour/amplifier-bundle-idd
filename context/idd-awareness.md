@@ -278,6 +278,29 @@ The Grammar injection hook means the LLM always knows the current
 decomposition state, success criteria progress, and corrections — without
 you needing to re-state them.
 
+### Memory Integration — Cross-Session Learning
+
+When LetsGo's memory store is available, IDD automatically:
+
+- **Stores resolved intents** as persistent memories when `idd:intent_resolved`
+  fires (category: `decision`, concepts: `problem-solution`, `what-changed`)
+- **Stores corrections** as learning memories when users redirect at the
+  confirmation gate (category: `learning`, concepts: `gotcha`, `trade-off`)
+
+During the **grounding phase**, search for relevant memories that might
+inform the current task:
+
+```
+memory(operation="search_memories", query="<goal from decomposition>")
+```
+
+Past decompositions, corrections, and outcomes surface automatically via
+LetsGo's memory-inject hook on every prompt. This means the LLM naturally
+remembers what worked (and what didn't) from prior sessions.
+
+If LetsGo is not present, the memory bridge silently no-ops. IDD works
+identically — it just doesn't have cross-session memory.
+
 ## Mid-Flight Correction
 
 The user can adjust the plan at any time by speaking at the intent level:
@@ -310,6 +333,17 @@ Then load any skill when you need its knowledge:
 Skills use progressive disclosure: you see the name and description (~100 tokens)
 automatically. Full content loads only when you call `load_skill(skill_name="...")`.
 Two skills have companion reference files accessible via `read_file(skill_directory + "/references/...")`.
+
+### LetsGo Integration (Optional)
+
+When LetsGo is composed alongside IDD, additional capabilities activate:
+
+| Capability | What It Does | Graceful Without LetsGo |
+|-----------|-------------|------------------------|
+| Memory persistence | Stores resolved intents and corrections as memories for future sessions | Yes — bridge hook silently no-ops |
+| Memory-informed grounding | Past decompositions surface during `/ground` phase | Yes — grounding works without memories |
+| Telemetry enrichment | Progress events include token/tool-call metrics | Yes — progress events omit telemetry field |
+| Sandbox investigation | `/ground` mode allows sandboxed command execution | Yes — bash is already allowed |
 
 ## IDD Expert Agents
 

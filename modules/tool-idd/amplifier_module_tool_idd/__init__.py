@@ -347,13 +347,28 @@ async def mount(coordinator: Any, config: dict[str, Any] | None = None) -> None:
             gs.status = "executing"
             gs.steps_completed += 1
 
+            # Enrich with telemetry snapshot if available
+            telemetry = None
+            try:
+                metrics_cap = coordinator.get_capability("telemetry.metrics")
+                if metrics_cap and callable(metrics_cap):
+                    telemetry = metrics_cap()
+                elif metrics_cap and hasattr(metrics_cap, "snapshot"):
+                    telemetry = metrics_cap.snapshot()
+            except Exception:
+                pass
+
+            progress_data: dict[str, Any] = {
+                "step": tool_name,
+                "completed": gs.steps_completed,
+                "total": gs.steps_total,
+            }
+            if telemetry:
+                progress_data["telemetry"] = telemetry
+
             await coordinator.hooks.emit(
                 "idd:progress",
-                {
-                    "step": tool_name,
-                    "completed": gs.steps_completed,
-                    "total": gs.steps_total,
-                },
+                progress_data,
             )
         except Exception:
             logger.debug("Could not emit idd:progress", exc_info=True)

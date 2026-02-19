@@ -21,6 +21,7 @@ pythonpath = [
     "modules/hooks-idd-grammar-inject",
     "modules/hooks-idd-reporter",
     "modules/hooks-idd-confirmation",
+    "modules/hooks-idd-memory-bridge",
 ]
 
 [tool.ruff]
