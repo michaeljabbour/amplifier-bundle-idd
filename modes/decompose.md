@@ -46,8 +46,9 @@ the five IDD primitives before any code is written or any action is taken.
 4. **Exit this mode** when the decomposition is approved (or auto-approved
    by the confirmation gate). Transition to:
    - `/ground` if there are unresolved discovery items
-   - `/execute-plan` (Superpowers) if the plan is ready and that mode is available
-   - Clear mode and execute directly if no methodology bundle is present
+   - Use `mode(operation="list")` to discover available execution modes
+     and suggest the best fit for implementation
+   - Clear mode and execute directly if no execution modes are available
 
 ## What You Cannot Do
 

@@ -1,37 +1,30 @@
 # IDD-Aware Session
 
 <STANDING-ORDER>
-BEFORE recommending /brainstorm or any planning mode for new work:
+BEFORE recommending any planning or design mode for new work:
 
-CHECK if IDD decomposition criteria are met:
-- Is the task multi-agent, multi-phase, or ambiguous in scope?
-- Are success criteria unclear or unmeasurable?
-- Does it involve coordination across different concerns?
-- Would multiple people disagree on what "done" means?
+CHECK if `/decompose` is the right starting point. Use it when ANY of
+these are true:
+- The task is multi-agent, multi-phase, or ambiguous in scope
+- Success criteria are unclear or unmeasurable
+- The request involves coordination across different concerns
+- Multiple people would disagree on what "done" means
+- The user explicitly asks to "break down", "decompose", or "plan"
 
-If ANY of these are true → suggest `/decompose` (NOT `/brainstorm`).
-IDD decomposition REPLACES brainstorm + write-plan. It produces typed
-primitives, measurable criteria, and explicit scope — not prose.
+If ANY criteria met → `/decompose`. It produces typed primitives,
+measurable success criteria, and explicit scope — not prose.
 
-If NONE are true → the task is focused execution. Use the appropriate
-methodology mode directly (/brainstorm, /execute-plan, /debug, etc.).
+If NONE are true → the task is focused execution. Let other available
+modes handle it. Use `mode(operation="list")` to see what's available.
 
-This applies EVEN WHEN Superpowers is present. IDD and Superpowers are
-complementary: IDD plans, Superpowers executes. The routing is:
+After `/decompose` completes:
+1. If unknowns remain → `/ground` to resolve them
+2. When ready to implement → use `mode(operation="list")` to discover
+   available execution modes and suggest the best fit
+3. After execution → verify each success criterion from the decomposition
 
-| Task Type | Route To | Why |
-|-----------|----------|-----|
-| Multi-agent, ambiguous scope, unclear criteria | `/decompose` | IDD's 5-primitive grammar produces structured plans |
-| Clear feature, known scope | `/brainstorm` or `/execute-plan` | Superpowers handles focused work natively |
-| Bug, error, unexpected behavior | `/debug` | Superpowers' systematic debugging |
-| "Build X from scratch" (complex, multi-step) | `/decompose` | Decompose first, then hand tasks to /execute-plan |
-| "Build X from scratch" (simple, clear scope) | `/brainstorm` | No decomposition needed |
-| "Plan this", "break this down" | `/decompose` | User explicitly wants structured decomposition |
-| Quick task (< 30 min, clear goal) | Appropriate mode directly | No decomposition overhead needed |
-
-After `/decompose` completes → transition to `/ground` (if unknowns) or
-`/execute-plan` (if ready). IDD produces the plan, Superpowers enforces
-TDD on each task. Do NOT brainstorm what IDD already decomposed.
+Do NOT duplicate planning. If IDD decomposed the task, the decomposition
+IS the plan. Do not re-plan the same work in a different mode.
 
 This is not optional. This is not a suggestion.
 </STANDING-ORDER>
@@ -136,76 +129,61 @@ In ALL other cases: decompose → ground → execute → verify. One flow.
 | Stop because confidence is 75% | 75% is good enough to start. Unknowns resolve during execution | Proceed and adapt |
 | Decompose a simple task into 5 agents | IDD is for complex work. Simple tasks get simple execution | Skip decomposition for single-step requests |
 
-## When Superpowers (or Similar Methodology Bundles) Is Present
+## Composing with Other Bundles
 
-IDD produces plans. Methodology bundles like Superpowers execute them with
-discipline. When both are composed, **eliminate duplicate phases** — don't
-brainstorm what IDD already decomposed, don't raw-execute what Superpowers
-enforces with TDD.
+IDD discovers what's available at runtime. It does not require or assume
+any specific bundle is present. Use `mode(operation="list")` to see what
+modes exist and adapt accordingly.
 
-### The Combined Flow
+### IDD's Role in Composition
 
-```
-IDD decomposes  →  IDD grounds  →  Superpowers executes (per task)  →  IDD verifies criteria
-     ↑                                    ↑                                    ↓
-replaces brainstorm          replaces IDD raw execution          combined with SP /verify
-  + write-plan               (TDD + 3-agent review)             then SP /finish
-```
+IDD owns **planning** — decomposing tasks into structured primitives with
+measurable success criteria. Other bundles may own **execution** (TDD,
+review pipelines), **debugging**, **infrastructure** (memory, telemetry,
+sandbox), or **finishing** (PR creation, merge, cleanup).
 
-### What Changes When a Methodology Bundle Is Present
+When other modes are available, use them for what they're best at:
 
-| IDD Phase | Without Methodology Bundle | With Methodology Bundle |
-|-----------|---------------------------|------------------------|
-| **Decompose** | Call `idd_decompose`, present summary | Same — this is where IDD adds unique value |
-| **Ground** | Resolve `context.to_discover` items | Same |
-| **Execute** | Delegate to agents with context | Hand each task to the methodology's execution mode (e.g. `/execute-plan`). Each task gets TDD enforcement and multi-agent review for free. |
-| **Verify** | Check success criteria against evidence | Check success criteria (IDD) AND run methodology verification (e.g. `/verify` for fresh test evidence). Both must pass. |
-| **Finish** | Report results | Hand off to methodology finish (e.g. `/finish` for PR creation, worktree cleanup) |
+| IDD Phase | IDD Alone | With Other Modes Available |
+|-----------|-----------|--------------------------|
+| **Decompose** | Call `idd_decompose`, present summary | Same — this is IDD's unique value |
+| **Ground** | Resolve `context.to_discover` items | Same — check for memory/sandbox capabilities to assist |
+| **Execute** | Delegate to agents directly | Check `mode(operation="list")` for execution modes that add enforcement (TDD, review pipelines). Use them if available. |
+| **Verify** | Check success criteria against evidence | Combine IDD criteria verification with any available verification modes for fresh test evidence |
+| **Finish** | Report results | Check for finishing modes that handle PR creation, branch cleanup, etc. |
 
 ### When IDD Should Step Back
 
-A methodology bundle like Superpowers handles these natively and better.
-Do NOT decompose — go straight to the appropriate mode:
+If the task does NOT meet IDD decomposition criteria (see standing order),
+let other available modes handle it. Check `mode(operation="list")` and
+pick the best fit. IDD does not decompose:
 
-- **Bug hunting / debugging** → `/debug` mode directly
-- **Implementation with clear spec** → `/execute-plan` mode directly
-- **Code review** → three-agent review pipeline directly
-- **Quick well-scoped task (< 30 min)** → appropriate mode directly
+- Bug hunting or debugging — use a debugging mode if available
+- Implementation with a clear spec — use an execution mode directly
+- Code review — delegate to review agents
+- Quick well-scoped tasks (< 30 min) — use the most appropriate mode
 
-### When IDD Should Lead
+### Mapping IDD Output to Execution
 
-IDD adds value that methodology bundles don't provide. Use `idd_decompose` when:
+After decomposition, the output maps directly to whatever execution
+mechanism is available:
 
-- The task is **multi-agent, multi-phase, or ambiguous in scope**
-- Nobody can articulate clear success criteria yet
-- The request involves **coordination** across different concerns
-- You keep restarting because the scope isn't right
-- Multiple stakeholders would disagree on what "done" means
-
-### Mapping IDD Output to Methodology Tasks
-
-When IDD decomposes and a methodology bundle executes, map the decomposition
-directly to methodology tasks:
-
-- Each **agent assignment** in the decomposition becomes a methodology task
+- Each **agent assignment** becomes a task for the execution mode/agent
 - The **success criteria** become verification assertions
-- The **behaviors** inform which methodology mode or discipline to apply
-- The **scope boundaries** (scope_in / scope_out) become guardrails for each task
+- The **behaviors** inform which mode or discipline to apply
+- The **scope boundaries** (scope_in / scope_out) become guardrails
 
-This means IDD's decomposition output IS the plan — no separate
-brainstorm-then-plan phase is needed. The decomposition is more structured
-than a brainstorm (typed primitives, measurable criteria, explicit scope)
-and the methodology's execution is more disciplined than raw delegation
-(TDD enforcement, review pipelines, evidence gates).
+The decomposition IS the plan. Do not re-plan the same work in another
+planning mode. If IDD decomposed it, proceed to grounding or execution.
 
-### What NOT to Do
+### Anti-Patterns
 
 | Anti-pattern | Why it's wrong | Do this instead |
 |-------------|---------------|-----------------|
-| Decompose with IDD, then brainstorm with methodology | Duplicate planning — wastes tokens and time | IDD decomposition replaces brainstorm + plan |
-| Skip IDD and brainstorm a multi-agent task | Methodology brainstorm produces prose, not typed primitives | Use IDD for multi-agent/ambiguous work |
-| Use IDD's raw execution when methodology enforcement is available | Loses TDD and review guarantees | Hand each task to methodology execution mode |
-| Run both verification passes separately | User sees two verification reports for the same work | Combine: IDD criteria check + methodology evidence check in one report |
+| Decompose with IDD, then re-plan in another mode | Duplicate planning — wastes tokens and time | IDD decomposition replaces other planning |
+| Skip IDD for a multi-agent ambiguous task | Other planning modes produce prose, not typed primitives | Use `/decompose` for multi-agent/ambiguous work |
+| Use raw delegation when execution enforcement modes exist | Loses TDD/review guarantees if available | Check `mode(operation="list")` and use enforcement modes |
+| Run IDD verification and another verification separately | User sees redundant reports | Combine into one verification pass |
 
 ## Amplifier Mechanisms
 
@@ -230,8 +208,10 @@ IDD provides two modes that restrict tool access during planning phases:
 - **Transition to `/ground`** if the decomposition has `context.to_discover`
   items. The mode allows full investigation (bash, read, delegate) but blocks
   code writing.
-- **Transition to execution** when grounding is complete. If Superpowers is
-  present, suggest `/execute-plan`. Otherwise, clear the mode and execute.
+- **Transition to execution** when grounding is complete. Use
+  `mode(operation="list")` to discover available execution modes. If an
+  enforcement mode exists (TDD, review pipeline), suggest it. Otherwise,
+  clear the mode and execute directly.
 
 Mode transitions are explicit — you suggest them, the user activates them,
 or you use `mode(operation="set", name="decompose")` programmatically.
